@@ -34,22 +34,23 @@ import {
   summary,
 } from '../lib/stats';
 import type { ScanHistoryItem } from '../lib/types';
-import Icon from './Icon';
+import PageHead from './PageHead';
 
 const C = {
-  green: '#4CAF50',
-  orange: '#FF9800',
-  red: '#F44336',
-  blue: '#2196F3',
-  purple: '#9C27B0',
-  grid: '#EEEEEE',
-  axis: '#9E9E9E',
+  green: '#3A8460',
+  orange: '#D9A62E',
+  red: '#CF5F3A',
+  blue: '#3D5A80',
+  purple: '#85577F',
+  sage: '#A8C8B3',
+  grid: '#ECEAE3',
+  axis: '#8A938E',
 };
 
-const axis = { stroke: C.axis, fontSize: 12, tickLine: false, axisLine: { stroke: '#E0E0E0' } };
+const axis = { stroke: C.axis, fontSize: 12, tickLine: false, axisLine: { stroke: '#DAD7CE' } };
 const tooltipStyle = {
-  contentStyle: { borderRadius: 8, border: '1px solid #E0E0E0', boxShadow: '0 2px 8px rgba(0,0,0,.08)', fontSize: 13 },
-  labelStyle: { color: '#2C3E50', fontWeight: 600 },
+  contentStyle: { borderRadius: 6, border: '1px solid #DAD7CE', boxShadow: 'none', background: '#FFFEFB', fontSize: 13 },
+  labelStyle: { color: '#17392A', fontWeight: 600 },
 };
 
 type ChartId =
@@ -79,6 +80,7 @@ const CHARTS: { id: ChartId; title: string; desc: string }[] = [
   { id: 'category', title: '食物類別', desc: '各類食物出現的次數' },
 ];
 
+const WIDE = new Set<ChartId>(['daily-intake', 'blood-sugar', 'time-of-day']);
 const DEFAULT_CHARTS: ChartId[] = ['daily-intake', 'score-trend', 'calendar', 'macro', 'meal-type', 'blood-sugar'];
 const PREF_KEY = 'sugar-friendly:charts';
 
@@ -124,43 +126,98 @@ export default function HealthCharts({ items, onSample }: { items: ScanHistoryIt
 
   if (items.length === 0) {
     return (
-      <div className="card empty">
-        <Icon name="chart" size={36} />
-        <h3>還沒有資料可以畫圖</h3>
-        <p className="muted">記錄幾餐之後，這裡會出現熱量、碳水、血糖等圖表。也可以先載入四週的示範資料看看。</p>
-        <button type="button" className="btn btn-outline" onClick={() => onSample(true)}>
-          載入示範資料
-        </button>
-      </div>
+      <>
+        <PageHead eyebrow="健康圖表" title="還沒有資料可以畫" />
+        <div className="blank">
+          <p>記錄幾餐之後，這裡會依時間、餐別、地點與血糖畫出各種圖。</p>
+          <p>也可以先放入四週的示範資料看看。</p>
+          <button type="button" className="btn btn-quiet" onClick={() => onSample(true)}>
+            放入示範資料
+          </button>
+        </div>
+      </>
     );
   }
 
-  return (
-    <div className="charts">
-      <div className="charts-bar">
-        <div className="tabs" role="tablist" aria-label="期間">
-          {PERIODS.map((p) => (
-            <button key={p.label} type="button" role="tab" aria-selected={period === p.days} className="tab" onClick={() => setPeriod(p.days)}>
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <button type="button" className="btn btn-outline btn-small" aria-expanded={picking} onClick={() => setPicking((v) => !v)}>
-          <Icon name="chart" size={16} /> 選擇圖表（{selected.length}）
-        </button>
-      </div>
+  const shown = CHARTS.filter((c) => selected.includes(c.id));
 
-      {picking && (
-        <div className="card picker">
-          <div className="picker-head">
-            <h3>要顯示哪些圖表</h3>
-            <span className="picker-actions">
-              <button type="button" className="btn-text" onClick={() => CHARTS.forEach((c) => !selected.includes(c.id) && toggle(c.id))}>
-                全選
+  return (
+    <>
+      <PageHead
+        eyebrow="健康圖表"
+        title={period ? `最近 ${period} 天` : '全部紀錄'}
+        aside={
+          <div className="tabs" role="tablist" aria-label="期間">
+            {PERIODS.map((p) => (
+              <button key={p.label} type="button" role="tab" aria-selected={period === p.days} className="tab" onClick={() => setPeriod(p.days)}>
+                {p.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
+
+      <dl className="strip">
+        <div>
+          <dt>記錄</dt>
+          <dd>
+            {s.meals}
+            <small>餐・{s.days} 天</small>
+          </dd>
+        </div>
+        <div>
+          <dt>平均糖友善度</dt>
+          <dd style={{ color: TONE_COLOR[scoreTone(s.score)] }}>
+            {s.score}
+            <small>/10</small>
+          </dd>
+        </div>
+        <div>
+          <dt>每日熱量</dt>
+          <dd>
+            {s.kcalPerDay.toLocaleString()}
+            <small>大卡</small>
+          </dd>
+        </div>
+        <div>
+          <dt>每日碳水</dt>
+          <dd>
+            {s.carbsPerDay}
+            <small>克</small>
+          </dd>
+        </div>
+        <div>
+          <dt>餐後血糖達標</dt>
+          <dd>
+            {s.bgInRange != null ? s.bgInRange : '—'}
+            <small>{s.bgInRange != null ? `%・平均 ${s.bgAfterAvg}` : '尚未填寫'}</small>
+          </dd>
+        </div>
+      </dl>
+
+      <div className="charts-layout">
+        <aside className="picker">
+          <button type="button" className="picker-toggle" aria-expanded={picking} onClick={() => setPicking((v) => !v)}>
+            顯示的圖表 <b>{selected.length}</b>／{CHARTS.length}
+          </button>
+          <div className={`picker-body${picking ? ' is-open' : ''}`}>
+            <ul className="picker-list">
+              {CHARTS.map((c) => (
+                <li key={c.id}>
+                  <label className="picker-item">
+                    <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} />
+                    <span>{c.title}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="picker-actions">
+              <button type="button" className="link-btn" onClick={() => CHARTS.forEach((c) => !selected.includes(c.id) && toggle(c.id))}>
+                全部顯示
               </button>
               <button
                 type="button"
-                className="btn-text"
+                className="link-btn"
                 onClick={() => {
                   setSelected(DEFAULT_CHARTS);
                   try {
@@ -172,85 +229,27 @@ export default function HealthCharts({ items, onSample }: { items: ScanHistoryIt
               >
                 恢復預設
               </button>
-            </span>
+            </div>
           </div>
-          <ul className="picker-list">
-            {CHARTS.map((c) => (
-              <li key={c.id}>
-                <label className="picker-item">
-                  <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} />
-                  <span>
-                    <b>{c.title}</b>
-                    <span className="muted small">{c.desc}</span>
-                  </span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+        </aside>
 
-      <div className="tiles">
-        <div className="tile">
-          <span className="tile-label">記錄餐數</span>
-          <span className="tile-value">{s.meals}</span>
-          <span className="tile-sub">{s.days} 天有紀錄</span>
-        </div>
-        <div className="tile">
-          <span className="tile-label">平均糖友善度</span>
-          <span className="tile-value" style={{ color: TONE_COLOR[scoreTone(s.score)] }}>
-            {s.score}
-          </span>
-          <span className="tile-sub">滿分 10</span>
-        </div>
-        <div className="tile">
-          <span className="tile-label">每日熱量</span>
-          <span className="tile-value">{s.kcalPerDay}</span>
-          <span className="tile-sub">大卡（平均）</span>
-        </div>
-        <div className="tile">
-          <span className="tile-label">每日碳水</span>
-          <span className="tile-value">{s.carbsPerDay}</span>
-          <span className="tile-sub">公克（平均）</span>
-        </div>
-        <div className="tile">
-          <span className="tile-label">餐後血糖達標</span>
-          <span className="tile-value">{s.bgInRange != null ? `${s.bgInRange}%` : '—'}</span>
-          <span className="tile-sub">{s.bgAfterAvg != null ? `平均 ${s.bgAfterAvg} mg/dL` : '尚未填寫血糖'}</span>
+        <div className="chart-flow">
+          {data.length === 0 && <NoData>這段期間沒有紀錄，換個期間看看。</NoData>}
+          {data.length > 0 &&
+            shown.map((c, i) => (
+              <section key={c.id} className={`chart${WIDE.has(c.id) ? ' chart-wide' : ''}`}>
+                <header>
+                  <span className="chart-no">{String(i + 1).padStart(2, '0')}</span>
+                  <h2>{c.title}</h2>
+                  <p>{c.desc}</p>
+                </header>
+                <ChartBody id={c.id} items={data} />
+              </section>
+            ))}
+          {data.length > 0 && shown.length === 0 && <NoData>左邊勾選想看的圖表。</NoData>}
         </div>
       </div>
-
-      {data.length === 0 ? (
-        <div className="card">
-          <NoData>這段期間沒有紀錄，換個期間看看。</NoData>
-        </div>
-      ) : (
-        <div className="chart-grid">
-          {selected.map((id) => {
-            const meta = CHARTS.find((c) => c.id === id)!;
-            return (
-              <section key={id} className={`card chart${id === 'daily-intake' || id === 'blood-sugar' ? ' chart-wide' : ''}`}>
-                <header>
-                  <h3>{meta.title}</h3>
-                  <p className="muted small">{meta.desc}</p>
-                </header>
-                <ChartBody id={id} items={data} />
-              </section>
-            );
-          })}
-          {selected.length === 0 && (
-            <div className="card">
-              <NoData>
-                目前沒有選任何圖表。
-                <button type="button" className="btn-text" onClick={() => setPicking(true)}>
-                  選擇圖表
-                </button>
-              </NoData>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -267,7 +266,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <YAxis yAxisId="g" orientation="right" {...axis} />
             <Tooltip {...tooltipStyle} formatter={(v, n) => [`${v} ${n === '熱量' ? '大卡' : '公克'}`, n]} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 13 }} />
-            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill="#A5D6A7" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill={C.sage} radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Line yAxisId="g" dataKey="carbs" name="碳水" stroke={C.orange} strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -377,7 +376,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
               {...tooltipStyle}
               formatter={(v, _n, p) => [`${v} 分（${(p.payload as { count: number }).count} 餐，平均碳水 ${(p.payload as { carbs: number }).carbs} 公克）`, '糖友善度']}
             />
-            <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={22} label={{ position: 'right', fontSize: 12, fill: '#555' }}>
+            <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={22} label={{ position: 'right', fontSize: 12, fill: '#4B5852' }}>
               {rows.map((r) => (
                 <Cell key={r.name} fill={TONE_COLOR[scoreTone(r.score)]} />
               ))}
@@ -401,7 +400,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={pts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <ReferenceArea y1={REFERENCE.bgBefore[0]} y2={REFERENCE.bgBefore[1]} fill="#9E9E9E" fillOpacity={0.1} />
+            <ReferenceArea y1={REFERENCE.bgBefore[0]} y2={REFERENCE.bgBefore[1]} fill={C.sage} fillOpacity={0.25} />
             <ReferenceLine y={REFERENCE.bgAfter} stroke={C.red} strokeDasharray="4 4" label={{ value: `餐後上限 ${REFERENCE.bgAfter}`, position: 'insideTopRight', fontSize: 11, fill: C.red }} />
             <XAxis dataKey="label" {...axis} minTickGap={16} />
             <YAxis domain={[60, 'auto']} {...axis} />
@@ -463,7 +462,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
 
     case 'category': {
       const rows = byCategory(items);
-      const palette = [C.green, C.orange, C.blue, C.purple, '#FFC107', '#795548', '#607D8B'];
+      const palette = [C.green, C.orange, C.blue, C.purple, C.red, C.sage, '#66756E'];
       return (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={rows} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>

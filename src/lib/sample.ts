@@ -33,7 +33,7 @@ export function sampleThumb(category: string): string {
   return (
     'data:image/svg+xml;utf8,' +
     encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="#F1F3F1"/><ellipse cx="160" cy="128" rx="112" ry="74" fill="#FFFFFF" stroke="#DADDDA" stroke-width="3"/><ellipse cx="160" cy="124" rx="74" ry="44" fill="${fill}"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="#E3EEE6"/><ellipse cx="160" cy="128" rx="112" ry="74" fill="#FFFFFF" stroke="#C9D9CE" stroke-width="3"/><ellipse cx="160" cy="124" rx="74" ry="44" fill="${fill}"/></svg>`,
     )
   );
 }

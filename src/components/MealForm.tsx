@@ -1,8 +1,20 @@
+import type { ReactNode } from 'react';
 import { COMPANIONS, MEAL_TYPES, PLACE_TYPES, guessMealType, toLocalInput } from '../lib/meal';
 import type { MealMeta } from '../lib/types';
-import Icon from './Icon';
 
 const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, Number(v)));
+
+function Row({ label, hint, htmlFor, children }: { label: string; hint?: string; htmlFor?: string; children: ReactNode }) {
+  return (
+    <div className="f-row">
+      <div className="f-label">
+        {htmlFor ? <label htmlFor={htmlFor}>{label}</label> : <span>{label}</span>}
+        {hint && <small>{hint}</small>}
+      </div>
+      <div className="f-field">{children}</div>
+    </div>
+  );
+}
 
 export default function MealForm({
   value,
@@ -11,6 +23,7 @@ export default function MealForm({
   estimatedGrams,
   photoTime,
   disabled,
+  idPrefix = 'mf',
 }: {
   value: MealMeta;
   onChange: (m: MealMeta) => void;
@@ -18,20 +31,19 @@ export default function MealForm({
   estimatedGrams?: number;
   photoTime?: Date;
   disabled?: boolean;
+  idPrefix?: string;
 }) {
   const set = <K extends keyof MealMeta>(k: K, v: MealMeta[K]) => onChange({ ...value, [k]: v });
+  const id = (s: string) => `${idPrefix}-${s}`;
 
   return (
     <fieldset className="meal-form" disabled={disabled}>
-      <div className="form-row">
-        <label className="form-label" htmlFor="eatenAt">
-          <Icon name="clock" /> 用餐時間
-        </label>
+      <Row label="時間" htmlFor={id('time')}>
         <div className="inline">
           <input
-            id="eatenAt"
+            id={id('time')}
             type="datetime-local"
-            className="input"
+            className="input input-time"
             value={toLocalInput(value.eatenAt)}
             onChange={(e) => {
               if (!e.target.value) return;
@@ -40,24 +52,23 @@ export default function MealForm({
               onChange({ ...value, eatenAt: d.toISOString(), mealType: guessMealType(d) });
             }}
           />
-          <button type="button" className="chip" onClick={() => onChange({ ...value, eatenAt: new Date().toISOString() })}>
+          <button type="button" className="link-btn" onClick={() => onChange({ ...value, eatenAt: new Date().toISOString() })}>
             現在
           </button>
           {photoTime && (
             <button
               type="button"
-              className="chip"
+              className="link-btn"
               title={photoTime.toLocaleString('zh-TW')}
               onClick={() => onChange({ ...value, eatenAt: photoTime.toISOString(), mealType: guessMealType(photoTime) })}
             >
-              用照片時間
+              照片拍攝時間
             </button>
           )}
         </div>
-      </div>
+      </Row>
 
-      <div className="form-row">
-        <span className="form-label">餐別</span>
+      <Row label="餐別">
         <div className="seg" role="radiogroup" aria-label="餐別">
           {MEAL_TYPES.map((m) => (
             <button
@@ -73,50 +84,39 @@ export default function MealForm({
             </button>
           ))}
         </div>
-      </div>
+      </Row>
 
-      <div className="form-row">
-        <span className="form-label">
-          <Icon name="pin" /> 地點
-        </span>
-        <div className="chips">
+      <Row label="地點" htmlFor={id('place')}>
+        <div className="toggles">
           {PLACE_TYPES.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              className="chip"
-              aria-pressed={value.placeType === p.key}
-              onClick={() => set('placeType', p.key)}
-            >
+            <button key={p.key} type="button" className="toggle" aria-pressed={value.placeType === p.key} onClick={() => set('placeType', p.key)}>
               {p.label}
             </button>
           ))}
         </div>
         <input
+          id={id('place')}
           className="input"
-          list="known-places"
-          placeholder="店名或地點（選填），例如：公司附近自助餐"
+          list={id('places')}
+          placeholder="店名或地點，例如：公司附近自助餐"
           value={value.placeName ?? ''}
           maxLength={40}
           onChange={(e) => set('placeName', e.target.value)}
         />
-        <datalist id="known-places">
+        <datalist id={id('places')}>
           {knownPlaces.map((p) => (
             <option key={p} value={p} />
           ))}
         </datalist>
-      </div>
+      </Row>
 
-      <div className="form-row">
-        <span className="form-label">
-          <Icon name="people" /> 和誰一起
-        </span>
-        <div className="chips">
+      <Row label="同桌">
+        <div className="toggles">
           {COMPANIONS.map((c) => (
             <button
               key={c.key}
               type="button"
-              className="chip"
+              className="toggle"
               aria-pressed={value.companion === c.key}
               onClick={() => set('companion', value.companion === c.key ? undefined : c.key)}
             >
@@ -124,78 +124,65 @@ export default function MealForm({
             </button>
           ))}
         </div>
-      </div>
+      </Row>
 
-      <div className="form-grid">
-        <label className="form-row">
-          <span className="form-label">
-            <Icon name="scale" /> 份量
-          </span>
-          <span className="unit-input">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={3000}
-              className="input"
-              placeholder={estimatedGrams ? String(estimatedGrams) : '自動估算'}
-              value={value.servingGrams ?? ''}
-              onChange={(e) => set('servingGrams', num(e.target.value))}
-            />
-            <span>公克</span>
-          </span>
-        </label>
-        <label className="form-row">
-          <span className="form-label">
-            <Icon name="drop" /> 餐前血糖
-          </span>
-          <span className="unit-input">
+      <Row label="份量" hint={estimatedGrams ? `模型估 ${estimatedGrams} 克` : '空白則由模型估'} htmlFor={id('grams')}>
+        <span className="unit-input unit-input-short">
+          <input
+            id={id('grams')}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={3000}
+            className="input"
+            placeholder={estimatedGrams ? String(estimatedGrams) : '—'}
+            value={value.servingGrams ?? ''}
+            onChange={(e) => set('servingGrams', num(e.target.value))}
+          />
+          <span>公克</span>
+        </span>
+      </Row>
+
+      <Row label="血糖" hint="mg/dL，餐後可之後補">
+        <div className="pair">
+          <label className="pair-item">
+            <span className="pair-label">餐前</span>
             <input
               type="number"
               inputMode="numeric"
               min={0}
               max={600}
               className="input"
-              placeholder="選填"
               value={value.bloodSugarBefore ?? ''}
               onChange={(e) => set('bloodSugarBefore', num(e.target.value))}
             />
-            <span>mg/dL</span>
-          </span>
-        </label>
-        <label className="form-row">
-          <span className="form-label">
-            <Icon name="drop" /> 餐後 2 小時
-          </span>
-          <span className="unit-input">
+          </label>
+          <label className="pair-item">
+            <span className="pair-label">餐後 2 小時</span>
             <input
               type="number"
               inputMode="numeric"
               min={0}
               max={600}
               className="input"
-              placeholder="可之後補"
               value={value.bloodSugarAfter ?? ''}
               onChange={(e) => set('bloodSugarAfter', num(e.target.value))}
             />
-            <span>mg/dL</span>
-          </span>
-        </label>
-      </div>
+          </label>
+        </div>
+      </Row>
 
-      <label className="form-row">
-        <span className="form-label">
-          <Icon name="note" /> 備註
-        </span>
+      <Row label="備註" htmlFor={id('notes')}>
         <textarea
+          id={id('notes')}
           className="input"
           rows={2}
           maxLength={120}
-          placeholder="例如：少飯、醬料另外放、這是兩人份"
+          placeholder="少飯、醬料另外放、兩人分食⋯⋯"
           value={value.notes ?? ''}
           onChange={(e) => set('notes', e.target.value)}
         />
-      </label>
+      </Row>
     </fieldset>
   );
 }

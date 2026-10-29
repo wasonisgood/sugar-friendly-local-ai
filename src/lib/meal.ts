@@ -1,12 +1,12 @@
 import type { Companion, MealMeta, MealType, NutritionalInfo, PlaceType, ScanHistoryItem } from './types';
 
-// 顏色沿用原 App（DietCalendarScreen 的 mealTypes）
+// 餐別色：與 styles.css 的色票一致
 export const MEAL_TYPES: { key: MealType; label: string; color: string }[] = [
-  { key: 'breakfast', label: '早餐', color: '#FF9800' },
-  { key: 'lunch', label: '午餐', color: '#FFC107' },
-  { key: 'dinner', label: '晚餐', color: '#3F51B5' },
-  { key: 'snack', label: '點心', color: '#9C27B0' },
-  { key: 'latenight', label: '宵夜', color: '#607D8B' },
+  { key: 'breakfast', label: '早餐', color: '#D9733B' },
+  { key: 'lunch', label: '午餐', color: '#D9A62E' },
+  { key: 'dinner', label: '晚餐', color: '#3D5A80' },
+  { key: 'snack', label: '點心', color: '#85577F' },
+  { key: 'latenight', label: '宵夜', color: '#66756E' },
 ];
 
 export const PLACE_TYPES: { key: PlaceType; label: string }[] = [
@@ -75,7 +75,7 @@ export function scoreTone(score: number): 'good' | 'fair' | 'poor' {
   return 'poor';
 }
 
-export const TONE_COLOR = { good: '#4CAF50', fair: '#FF9800', poor: '#F44336' } as const;
+export const TONE_COLOR = { good: '#3A8460', fair: '#D9A62E', poor: '#CF5F3A' } as const;
 
 export function dayKey(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');

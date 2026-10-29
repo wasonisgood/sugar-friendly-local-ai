@@ -1,12 +1,12 @@
 import type { ModelState } from '../lib/localModel';
 
 const TEXT: Record<ModelState, string> = {
-  checking: '正在檢查瀏覽器…',
-  unsupported: '這個瀏覽器沒有內建模型',
-  unavailable: '這台裝置目前無法使用內建模型',
-  downloadable: '模型尚未下載（約 2 GB，只需一次）',
+  checking: '檢查中',
+  unsupported: '本機模型未開啟',
+  unavailable: '本機模型無法使用',
+  downloadable: '模型未下載（約 2 GB）',
   downloading: '模型下載中',
-  available: 'Gemini Nano 已就緒，照片只在本機處理',
+  available: '本機模型就緒',
 };
 
 export default function ModelStatus({

@@ -3,16 +3,17 @@ import Dropzone from './components/Dropzone';
 import Guide from './components/Guide';
 import HealthCharts from './components/HealthCharts';
 import HistoryList from './components/HistoryList';
-import Icon, { type IconName } from './components/Icon';
+import Icon from './components/Icon';
 import MealForm from './components/MealForm';
 import MetaEditor from './components/MetaEditor';
 import ModelStatus from './components/ModelStatus';
+import PageHead from './components/PageHead';
 import ResultSheet from './components/ResultSheet';
 import { imageFromPasteEvent } from './lib/clipboard';
 import { addHistory, addSampleData, clearHistory, loadHistory, removeHistory, removeSampleData, updateMeta } from './lib/history';
 import { prepareImage, type PreparedImage } from './lib/image';
 import { analyzeFood, checkAvailability, prepareModel, type ModelState } from './lib/localModel';
-import { defaultMeta, mealInfo } from './lib/meal';
+import { TONE_COLOR, defaultMeta, mealInfo, scoreTone } from './lib/meal';
 import { SAMPLE_RESULT, SAMPLE_THUMB } from './lib/sample';
 import type { MealMeta, ScanHistoryItem } from './lib/types';
 
@@ -25,11 +26,11 @@ type Phase =
   | { kind: 'sample' }
   | { kind: 'error'; message: string };
 
-const NAV: { id: View; label: string; icon: IconName }[] = [
-  { id: 'scan', label: '記錄一餐', icon: 'camera' },
-  { id: 'history', label: '飲食紀錄', icon: 'list' },
-  { id: 'charts', label: '健康圖表', icon: 'chart' },
-  { id: 'guide', label: '本地模型說明', icon: 'info' },
+const NAV: { id: View; label: string }[] = [
+  { id: 'scan', label: '記錄一餐' },
+  { id: 'history', label: '飲食紀錄' },
+  { id: 'charts', label: '健康圖表' },
+  { id: 'guide', label: '本地模型' },
 ];
 
 const readView = (): View => {
@@ -97,7 +98,7 @@ export default function App() {
       });
       const now = new Date();
       const shot = file.lastModified ? new Date(file.lastModified) : undefined;
-      // 相簿裡的舊照片：提供「用照片時間」
+      // 相簿裡的舊照片：提供「照片拍攝時間」
       setPhotoTime(shot && Math.abs(now.getTime() - shot.getTime()) > 30 * 60 * 1000 ? shot : undefined);
       setMeta((m) => ({ ...defaultMeta(now), placeType: m.placeType, placeName: m.placeName, companion: m.companion }));
       setPhase({ kind: 'ready' });
@@ -150,7 +151,7 @@ export default function App() {
         e instanceof SyntaxError
           ? '模型回覆的格式不完整，請再試一次，或換一張比較清楚的照片。'
           : e instanceof Error && e.name === 'NotSupportedError'
-            ? '這版 Chrome 的內建模型還不支援圖片輸入，請到「本地模型說明」開啟多模態設定。'
+            ? '這版 Chrome 的內建模型還不支援圖片輸入，請到「本地模型」頁開啟多模態設定。'
             : `辨識失敗：${e instanceof Error ? e.message : String(e)}`;
       setPhase({ kind: 'error', message: msg });
     } finally {
@@ -185,11 +186,13 @@ export default function App() {
     meta,
     isSample: true,
   };
+  const recent = history.filter((h) => !h.isSample).slice(0, 4);
+  const today = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
     <>
-      <header className="navbar">
-        <div className="navbar-inner">
+      <header className="masthead">
+        <div className="masthead-inner">
           <a
             className="brand"
             href="#"
@@ -198,8 +201,11 @@ export default function App() {
               go('scan');
             }}
           >
-            <Icon name="leaf" size={28} />
-            <span>糖友善</span>
+            <span className="brand-mark" aria-hidden="true">
+              <Icon name="leaf" size={18} />
+            </span>
+            <span className="brand-name">糖友善</span>
+            <span className="brand-sub">飲食紀錄</span>
           </a>
           <nav className="nav" aria-label="主要">
             {NAV.map((n) => (
@@ -213,171 +219,200 @@ export default function App() {
                   go(n.id);
                 }}
               >
-                <Icon name={n.icon} />
                 {n.label}
               </a>
             ))}
           </nav>
+          <ModelStatus state={modelState} progress={progress} onDownload={() => download().catch(() => {})} onHelp={() => go('guide')} />
         </div>
       </header>
 
-      <div className="container">
-        <ModelStatus state={modelState} progress={progress} onDownload={() => download().catch(() => {})} onHelp={() => go('guide')} />
-
-        <main>
-          {view === 'scan' && (
-            <>
-              {phase.kind === 'empty' && (
-                <div className="intro">
-                  <section className="card intro-text">
-                    <h1>記錄這一餐</h1>
-                    <p className="muted">
-                      上傳餐點照片，Chrome 內建的 Gemini Nano 會在你的電腦上估算熱量、碳水與糖分，並依糖友的需求給份量建議。照片不會上傳到任何伺服器。
-                    </p>
-                    <ol className="how">
-                      <li>
-                        <span>1</span>選照片、拍照，或從剪貼簿貼上
-                      </li>
-                      <li>
-                        <span>2</span>填寫用餐時間、地點，有量血糖也可以一起記
-                      </li>
-                      <li>
-                        <span>3</span>開始辨識，結果自動存進飲食紀錄與健康圖表
-                      </li>
-                    </ol>
-                  </section>
+      <main className="page">
+        {view === 'scan' && (
+          <>
+            {phase.kind === 'empty' && (
+              <>
+                <PageHead eyebrow={today} title="今天吃了什麼？">
+                  拍下或貼上這一餐，Chrome 內建的 Gemini Nano 會在你的電腦上估算熱量與碳水，照片不會上傳。
+                </PageHead>
+                <div className="home">
                   <Dropzone onFile={onFile} />
+                  <aside className="home-aside">
+                    <h2 className="side-title">最近幾餐</h2>
+                    {recent.length === 0 ? (
+                      <p className="fine">還沒有紀錄。第一餐記下來之後，會出現在這裡。</p>
+                    ) : (
+                      <ul className="mini-list">
+                        {recent.map((h) => (
+                          <li key={h.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                go('history');
+                                setOpenedId(h.id);
+                              }}
+                            >
+                              <span className="mini-meal" style={{ ['--meal' as string]: mealInfo(h.meta.mealType).color }}>
+                                {mealInfo(h.meta.mealType).label}
+                              </span>
+                              <span className="mini-name">{h.analysisResult.foodName}</span>
+                              <span className="mini-score" style={{ color: TONE_COLOR[scoreTone(h.analysisResult.sugarFriendlyScore)] }}>
+                                {h.analysisResult.sugarFriendlyScore}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <h2 className="side-title">記錄的順序</h2>
+                    <ol className="side-steps">
+                      <li>放一張照片：選檔、拍照或 Ctrl + V</li>
+                      <li>補上時間、餐別、地點，有量血糖就一起填</li>
+                      <li>按「開始辨識」，結果會存進紀錄與圖表</li>
+                    </ol>
+                  </aside>
                 </div>
-              )}
+              </>
+            )}
 
-              {image && (phase.kind === 'ready' || phase.kind === 'working' || phase.kind === 'error') && (
+            {image && (phase.kind === 'ready' || phase.kind === 'working' || phase.kind === 'error') && (
+              <>
+                <PageHead eyebrow="記錄一餐" title="補上這一餐的資訊">
+                  資訊越完整，之後的圖表越有參考價值。只有照片是必要的。
+                </PageHead>
                 <div className="compose">
                   <div className="compose-photo">
-                    <figure className="card photo">
+                    <figure className="photo">
                       <img src={image.previewUrl} alt="待辨識的餐點" />
                       {phase.kind === 'working' && (
-                        <div className="working" role="status">
+                        <figcaption className="working" role="status">
                           <span className="spinner" aria-hidden="true" />
-                          <span>
-                            {modelState === 'downloading'
-                              ? `正在下載模型 ${progress !== null ? Math.round(progress * 100) + '%' : ''}`
-                              : phase.chars === 0
-                                ? '模型正在看這張照片…'
-                                : `正在產生分析（${phase.chars} 字）`}
-                          </span>
-                        </div>
+                          {modelState === 'downloading'
+                            ? `正在下載模型 ${progress !== null ? Math.round(progress * 100) + '%' : ''}`
+                            : phase.chars === 0
+                              ? '模型正在看這張照片⋯'
+                              : `正在寫分析（${phase.chars} 字）`}
+                        </figcaption>
                       )}
                     </figure>
-                    <p className="muted small">
-                      想換照片可以直接按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上新的。
+                    <p className="fine">
+                      換照片：直接 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上新的，或
+                      <button type="button" className="link-btn" onClick={reset} disabled={phase.kind === 'working'}>
+                        重新選擇
+                      </button>
                     </p>
                   </div>
 
-                  <section className="card compose-form">
-                    <h2>用餐資訊</h2>
+                  <div className="compose-form">
                     <MealForm value={meta} onChange={setMeta} knownPlaces={knownPlaces} photoTime={photoTime} disabled={phase.kind === 'working'} />
 
                     {phase.kind === 'error' && <p className="alert">{phase.message}</p>}
 
-                    <div className="actions">
+                    <div className="action-bar">
                       {phase.kind === 'working' ? (
-                        <button type="button" className="btn btn-outline" onClick={() => abortRef.current?.abort()}>
+                        <button type="button" className="btn btn-quiet" onClick={() => abortRef.current?.abort()}>
                           取消
                         </button>
                       ) : (
-                        <>
-                          <button type="button" className="btn btn-primary" disabled={!canRun} onClick={run}>
-                            {modelState === 'downloadable' ? '下載模型並辨識' : '開始辨識'}
+                        <button type="button" className="btn btn-primary" disabled={!canRun} onClick={run}>
+                          {modelState === 'downloadable' ? '下載模型並辨識' : '開始辨識'}
+                        </button>
+                      )}
+                      {!canRun && modelState !== 'checking' && modelState !== 'downloading' && (
+                        <span className="fine">
+                          這個瀏覽器還不能用本地模型。
+                          <button type="button" className="link-btn" onClick={() => go('guide')}>
+                            怎麼開啟
                           </button>
-                          <button type="button" className="btn btn-outline" onClick={reset}>
-                            換一張
+                          ・
+                          <button type="button" className="link-btn" onClick={() => setPhase({ kind: 'sample' })}>
+                            先看範例
                           </button>
-                        </>
+                        </span>
                       )}
                     </div>
-
-                    {!canRun && modelState !== 'checking' && modelState !== 'downloading' && (
-                      <p className="muted small">
-                        這個瀏覽器還不能用本地模型。可以照
-                        <button type="button" className="btn-text" onClick={() => go('guide')}>
-                          說明頁
-                        </button>
-                        的步驟開啟，或先
-                        <button type="button" className="btn-text" onClick={() => setPhase({ kind: 'sample' })}>
-                          看一份範例結果
-                        </button>
-                        。
-                      </p>
-                    )}
-                  </section>
-                </div>
-              )}
-
-              {phase.kind === 'error' && !image && (
-                <p className="alert">
-                  {phase.message}{' '}
-                  <button type="button" className="btn-text" onClick={reset}>
-                    重新選擇
-                  </button>
-                </p>
-              )}
-
-              {(doneItem || phase.kind === 'sample') && (
-                <>
-                  {doneItem && !editing && <p className="saved"><Icon name="check" size={16} /> 已存進飲食紀錄</p>}
-                  <ResultSheet item={doneItem ?? sampleItem} onEdit={doneItem && !editing ? () => setEditing(true) : undefined} />
-                  {doneItem && editing && (
-                    <MetaEditor item={doneItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(doneItem.id, m)} onCancel={() => setEditing(false)} />
-                  )}
-                  <div className="actions actions-center">
-                    <button type="button" className="btn btn-primary" onClick={reset}>
-                      再記一餐
-                    </button>
-                    {doneItem && (
-                      <button type="button" className="btn btn-outline" onClick={() => go('charts')}>
-                        看健康圖表
-                      </button>
-                    )}
                   </div>
-                </>
+                </div>
+              </>
+            )}
+
+            {phase.kind === 'error' && !image && (
+              <p className="alert">
+                {phase.message}{' '}
+                <button type="button" className="link-btn" onClick={reset}>
+                  重新選擇
+                </button>
+              </p>
+            )}
+
+            {(doneItem || phase.kind === 'sample') && (
+              <>
+                {doneItem && !editing && (
+                  <p className="saved">
+                    <Icon name="check" size={16} /> 已存進飲食紀錄
+                  </p>
+                )}
+                <ResultSheet item={doneItem ?? sampleItem} onEdit={doneItem && !editing ? () => setEditing(true) : undefined} />
+                {doneItem && editing && (
+                  <MetaEditor item={doneItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(doneItem.id, m)} onCancel={() => setEditing(false)} />
+                )}
+                <div className="page-foot">
+                  <button type="button" className="btn btn-primary" onClick={reset}>
+                    再記一餐
+                  </button>
+                  {doneItem && (
+                    <button type="button" className="btn btn-quiet" onClick={() => go('charts')}>
+                      看健康圖表
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {view === 'history' &&
+          (openedItem ? (
+            <>
+              <button
+                type="button"
+                className="back"
+                onClick={() => {
+                  setOpenedId(null);
+                  setEditing(false);
+                }}
+              >
+                ← 飲食紀錄
+              </button>
+              <ResultSheet item={openedItem} onEdit={!editing ? () => setEditing(true) : undefined} />
+              {editing && (
+                <MetaEditor item={openedItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(openedItem.id, m)} onCancel={() => setEditing(false)} />
               )}
             </>
-          )}
+          ) : (
+            <HistoryList
+              items={history}
+              onOpen={(it) => {
+                setOpenedId(it.id);
+                window.scrollTo({ top: 0 });
+              }}
+              onRemove={(id) => setHistory(removeHistory(id))}
+              onClear={() => setHistory(clearHistory())}
+              onSample={toggleSample}
+            />
+          ))}
 
-          {view === 'history' &&
-            (openedItem ? (
-              <>
-                <button type="button" className="back" onClick={() => { setOpenedId(null); setEditing(false); }}>
-                  <Icon name="back" size={16} /> 回到飲食紀錄
-                </button>
-                <ResultSheet item={openedItem} onEdit={!editing ? () => setEditing(true) : undefined} />
-                {editing && (
-                  <MetaEditor item={openedItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(openedItem.id, m)} onCancel={() => setEditing(false)} />
-                )}
-              </>
-            ) : (
-              <HistoryList
-                items={history}
-                onOpen={(it) => {
-                  setOpenedId(it.id);
-                  window.scrollTo({ top: 0 });
-                }}
-                onRemove={(id) => setHistory(removeHistory(id))}
-                onClear={() => setHistory(clearHistory())}
-                onSample={toggleSample}
-              />
-            ))}
+        {view === 'charts' && <HealthCharts items={history} onSample={toggleSample} />}
 
-          {view === 'charts' && <HealthCharts items={history} onSample={toggleSample} />}
+        {view === 'guide' && <Guide state={modelState} />}
+      </main>
 
-          {view === 'guide' && <Guide state={modelState} />}
-        </main>
-
-        <footer className="footer">
-          <p>糖友善 · Sugar Friendly App 網頁版。食物辨識使用 Chrome 內建 Prompt API，資料只存在這個瀏覽器。</p>
-          <p>內容僅供飲食記錄參考，不能取代醫療建議。</p>
-        </footer>
-      </div>
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>糖友善・Sugar Friendly App 網頁版</span>
+          <span>辨識使用 Chrome 內建 Prompt API，資料只存在這個瀏覽器。內容僅供飲食記錄參考，不能取代醫療建議。</span>
+        </div>
+      </footer>
     </>
   );
 }

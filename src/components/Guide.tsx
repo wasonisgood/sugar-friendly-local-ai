@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ModelState } from '../lib/localModel';
+import PageHead from './PageHead';
 
 const FLAGS = [
   { flag: 'chrome://flags/#optimization-guide-on-device-model', value: 'Enabled BypassPerfRequirement' },
@@ -29,7 +30,10 @@ function CopyLine({ text }: { text: string }) {
 export default function Guide({ state }: { state: ModelState }) {
   return (
     <div className="guide">
-      <section className="card">
+      <PageHead eyebrow="本地模型" title="照片在你的電腦上辨識">
+        這個網站不呼叫雲端 AI，而是用 Chrome 內建的 Gemini Nano。以下是它需要什麼、怎麼開啟。
+      </PageHead>
+      <section className="guide-sec">
         <h2>為什麼不用雲端 AI？</h2>
         <p>
           原本的 App 會把照片傳到 OpenAI 分析，需要 API 金鑰，也要付費。這個網站改用 Chrome 內建的
@@ -40,7 +44,7 @@ export default function Guide({ state }: { state: ModelState }) {
         </p>
       </section>
 
-      <section className="card">
+      <section className="guide-sec">
         <h2>需要什麼</h2>
         <ul className="plain">
           <li>桌機或筆電上的 Chrome 138 以上（Windows 10/11、macOS 13 以上、Linux、ChromeOS）</li>
@@ -51,7 +55,7 @@ export default function Guide({ state }: { state: ModelState }) {
         <p className="muted">目前狀態：{stateLabel(state)}</p>
       </section>
 
-      <section className="card">
+      <section className="guide-sec">
         <h2>開啟步驟</h2>
         <ol className="steps">
           <li>
@@ -80,7 +84,7 @@ export default function Guide({ state }: { state: ModelState }) {
         </ol>
       </section>
 
-      <section className="card">
+      <section className="guide-sec">
         <h2>資料存在哪裡</h2>
         <p>
           辨識紀錄（縮圖與結果）存在這個瀏覽器的 localStorage，不會同步到其他裝置。清除瀏覽器資料或按「全部清除」就會刪掉。
