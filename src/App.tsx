@@ -4,6 +4,7 @@ import Guide from './components/Guide';
 import HistoryList from './components/HistoryList';
 import ModelStatus from './components/ModelStatus';
 import ResultSheet from './components/ResultSheet';
+import { imageFromPasteEvent } from './lib/clipboard';
 import { addHistory, clearHistory, loadHistory, removeHistory } from './lib/history';
 import { prepareImage, type PreparedImage } from './lib/image';
 import { analyzeFood, checkAvailability, prepareModel, type ModelState } from './lib/localModel';
@@ -84,6 +85,22 @@ export default function App() {
       setPhase({ kind: 'error', message: '這個檔案讀不出來，請換一張 JPG 或 PNG 照片。' });
     }
   }, []);
+
+  // 全頁 Ctrl+V：任何畫面都能直接貼上圖片（辨識中除外）
+  const busy = phase.kind === 'working';
+  useEffect(() => {
+    if (busy) return;
+    const onPaste = (e: ClipboardEvent) => {
+      const file = imageFromPasteEvent(e);
+      if (!file) return; // 純文字照常貼進輸入框
+      e.preventDefault();
+      setOpened(null);
+      if (location.hash) location.hash = '';
+      onFile(file);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [busy, onFile]);
 
   const run = async () => {
     if (!image) return;
@@ -175,7 +192,7 @@ export default function App() {
                   </p>
                   <ol className="how">
                     <li>
-                      <b>一、</b>選一張照片，或直接拍
+                      <b>一、</b>選一張照片、直接拍，或從剪貼簿貼上
                     </li>
                     <li>
                       <b>二、</b>可以補一句說明，例如「這是半碗」
@@ -221,6 +238,12 @@ export default function App() {
                   </label>
 
                   {phase.kind === 'error' && <p className="error">{phase.message}</p>}
+
+                  {phase.kind !== 'working' && (
+                    <p className="muted small">
+                      想換照片也可以直接按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上新的。
+                    </p>
+                  )}
 
                   <div className="row">
                     {phase.kind === 'working' ? (

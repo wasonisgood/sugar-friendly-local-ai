@@ -1,25 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
+import { ClipboardImageError, readClipboardImage } from '../lib/clipboard';
 
 export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => void; disabled?: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
-
-  // 直接 Ctrl+V 貼上截圖
-  useEffect(() => {
-    if (disabled) return;
-    const onPaste = (e: ClipboardEvent) => {
-      const file = Array.from(e.clipboardData?.files ?? []).find((f) => f.type.startsWith('image/'));
-      if (file) onFile(file);
-    };
-    window.addEventListener('paste', onPaste);
-    return () => window.removeEventListener('paste', onPaste);
-  }, [onFile, disabled]);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) onFile(f);
     e.target.value = '';
+  };
+
+  const pasteFromClipboard = async () => {
+    setNotice(null);
+    try {
+      onFile(await readClipboardImage());
+    } catch (e) {
+      setNotice(e instanceof ClipboardImageError ? e.message : '讀取剪貼簿失敗，請改用 Ctrl + V。');
+    }
   };
 
   return (
@@ -43,15 +43,25 @@ export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => vo
         <path d="M14 20 l6 -10 M106 20 l-6 -10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
       <p className="drop-title">把餐點照片拖到這裡</p>
-      <p className="drop-sub">也可以直接 Ctrl + V 貼上截圖</p>
+      <p className="drop-sub">
+        或在頁面任何地方按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上
+      </p>
       <div className="drop-actions">
         <button type="button" className="btn" disabled={disabled} onClick={() => fileRef.current?.click()}>
           選擇照片
+        </button>
+        <button type="button" className="btn btn-ghost" disabled={disabled} onClick={pasteFromClipboard}>
+          從剪貼簿貼上
         </button>
         <button type="button" className="btn btn-ghost" disabled={disabled} onClick={() => cameraRef.current?.click()}>
           用相機拍
         </button>
       </div>
+      {notice && (
+        <p className="drop-notice" role="alert">
+          {notice}
+        </p>
+      )}
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
     </div>
