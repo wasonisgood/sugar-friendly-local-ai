@@ -2,11 +2,11 @@ import type { Companion, MealMeta, MealType, NutritionalInfo, PlaceType, ScanHis
 
 // 餐別色：與 styles.css 的色票一致
 export const MEAL_TYPES: { key: MealType; label: string; color: string }[] = [
-  { key: 'breakfast', label: '早餐', color: '#D9733B' },
-  { key: 'lunch', label: '午餐', color: '#D9A62E' },
-  { key: 'dinner', label: '晚餐', color: '#3D5A80' },
-  { key: 'snack', label: '點心', color: '#85577F' },
-  { key: 'latenight', label: '宵夜', color: '#66756E' },
+  { key: 'breakfast', label: '早餐', color: '#E07A5F' },
+  { key: 'lunch', label: '午餐', color: '#E9B949' },
+  { key: 'dinner', label: '晚餐', color: '#6C9BC4' },
+  { key: 'snack', label: '點心', color: '#A584A8' },
+  { key: 'latenight', label: '宵夜', color: '#8D9488' },
 ];
 
 export const PLACE_TYPES: { key: PlaceType; label: string }[] = [
@@ -75,7 +75,7 @@ export function scoreTone(score: number): 'good' | 'fair' | 'poor' {
   return 'poor';
 }
 
-export const TONE_COLOR = { good: '#3A8460', fair: '#D9A62E', poor: '#CF5F3A' } as const;
+export const TONE_COLOR = { good: '#5E9152', fair: '#DDA02B', poor: '#D9694A' } as const;
 
 export function dayKey(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');

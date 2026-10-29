@@ -99,9 +99,8 @@ export default function HistoryList({
                   {d.getMonth() + 1} 月・{d.toLocaleDateString('zh-TW', { weekday: 'short' })}
                 </span>
                 <span className="tl-sum">
-                  {Math.round(kcal).toLocaleString()} 大卡
-                  <br />
-                  碳水 {Math.round(carbs)} 克
+                  <span>{Math.round(kcal).toLocaleString()} 大卡</span>
+                  <span>碳水 {Math.round(carbs)} 克</span>
                 </span>
               </div>
               <ul className="tl-meals">

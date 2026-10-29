@@ -37,20 +37,20 @@ import type { ScanHistoryItem } from '../lib/types';
 import PageHead from './PageHead';
 
 const C = {
-  green: '#3A8460',
-  orange: '#D9A62E',
-  red: '#CF5F3A',
-  blue: '#3D5A80',
-  purple: '#85577F',
-  sage: '#A8C8B3',
-  grid: '#ECEAE3',
-  axis: '#8A938E',
+  green: '#5E9152',
+  orange: '#E9B949',
+  red: '#D9694A',
+  blue: '#6C9BC4',
+  purple: '#A584A8',
+  sage: '#C7EABB',
+  grid: '#EDF0E4',
+  axis: '#8C9686',
 };
 
-const axis = { stroke: C.axis, fontSize: 12, tickLine: false, axisLine: { stroke: '#DAD7CE' } };
+const axis = { stroke: C.axis, fontSize: 12, tickLine: false, axisLine: { stroke: '#DDE3CF' } };
 const tooltipStyle = {
-  contentStyle: { borderRadius: 6, border: '1px solid #DAD7CE', boxShadow: 'none', background: '#FFFEFB', fontSize: 13 },
-  labelStyle: { color: '#17392A', fontWeight: 600 },
+  contentStyle: { borderRadius: 6, border: '1px solid #DDE3CF', boxShadow: '0 4px 14px rgba(60,80,50,.08)', background: '#FFFFFF', fontSize: 13 },
+  labelStyle: { color: '#2F4A2A', fontWeight: 600 },
 };
 
 type ChartId =
@@ -266,7 +266,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <YAxis yAxisId="g" orientation="right" {...axis} />
             <Tooltip {...tooltipStyle} formatter={(v, n) => [`${v} ${n === '熱量' ? '大卡' : '公克'}`, n]} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 13 }} />
-            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill={C.sage} radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill="#A2CB8B" radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Line yAxisId="g" dataKey="carbs" name="碳水" stroke={C.orange} strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -334,7 +334,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <YAxis yAxisId="s" orientation="right" domain={[0, 10]} {...axis} />
             <Tooltip {...tooltipStyle} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 13 }} />
-            <Bar yAxisId="g" dataKey="carbs" name="平均碳水（公克）" radius={[4, 4, 0, 0]} maxBarSize={36}>
+            <Bar yAxisId="g" dataKey="carbs" name="平均碳水（公克，依餐別上色）" fill={C.axis} radius={[4, 4, 0, 0]} maxBarSize={36}>
               {rows.map((r) => (
                 <Cell key={r.name} fill={r.color} />
               ))}
@@ -376,7 +376,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
               {...tooltipStyle}
               formatter={(v, _n, p) => [`${v} 分（${(p.payload as { count: number }).count} 餐，平均碳水 ${(p.payload as { carbs: number }).carbs} 公克）`, '糖友善度']}
             />
-            <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={22} label={{ position: 'right', fontSize: 12, fill: '#4B5852' }}>
+            <Bar dataKey="score" radius={[0, 4, 4, 0]} maxBarSize={22} label={{ position: 'right', fontSize: 12, fill: '#55604F' }}>
               {rows.map((r) => (
                 <Cell key={r.name} fill={TONE_COLOR[scoreTone(r.score)]} />
               ))}
@@ -462,7 +462,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
 
     case 'category': {
       const rows = byCategory(items);
-      const palette = [C.green, C.orange, C.blue, C.purple, C.red, C.sage, '#66756E'];
+      const palette = [C.green, C.orange, C.blue, C.purple, C.red, C.sage, '#8D9488'];
       return (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={rows} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
@@ -506,7 +506,7 @@ function CalendarHeat({ items }: { items: ScanHistoryItem[] }) {
   const end = new Date();
   end.setHours(0, 0, 0, 0);
   const start = new Date(end);
-  start.setDate(start.getDate() - 34 - start.getDay()); // 從週日開始，約五週
+  start.setDate(start.getDate() - 28 - start.getDay()); // 從四週前的週日開始，共五列
   const cells: { key: string; date: Date }[] = [];
   for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) cells.push({ key: dayKey(d), date: new Date(d) });
 

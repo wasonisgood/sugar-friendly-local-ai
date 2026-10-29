@@ -86,9 +86,9 @@ export function macroShare(items: ScanHistoryItem[]) {
   );
   const total = t.carbs + t.protein + t.fat || 1;
   return [
-    { name: '碳水化合物', value: Math.round(t.carbs), pct: Math.round((t.carbs / total) * 100), color: '#D9A62E' },
-    { name: '蛋白質', value: Math.round(t.protein), pct: Math.round((t.protein / total) * 100), color: '#3A8460' },
-    { name: '脂肪', value: Math.round(t.fat), pct: Math.round((t.fat / total) * 100), color: '#3D5A80' },
+    { name: '碳水化合物', value: Math.round(t.carbs), pct: Math.round((t.carbs / total) * 100), color: '#E9B949' },
+    { name: '蛋白質', value: Math.round(t.protein), pct: Math.round((t.protein / total) * 100), color: '#84B179' },
+    { name: '脂肪', value: Math.round(t.fat), pct: Math.round((t.fat / total) * 100), color: '#6C9BC4' },
   ];
 }
 

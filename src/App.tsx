@@ -3,7 +3,7 @@ import Dropzone from './components/Dropzone';
 import Guide from './components/Guide';
 import HealthCharts from './components/HealthCharts';
 import HistoryList from './components/HistoryList';
-import Icon from './components/Icon';
+import Icon, { type IconName } from './components/Icon';
 import MealForm from './components/MealForm';
 import MetaEditor from './components/MetaEditor';
 import ModelStatus from './components/ModelStatus';
@@ -13,7 +13,7 @@ import { imageFromPasteEvent } from './lib/clipboard';
 import { addHistory, addSampleData, clearHistory, loadHistory, removeHistory, removeSampleData, updateMeta } from './lib/history';
 import { prepareImage, type PreparedImage } from './lib/image';
 import { analyzeFood, checkAvailability, prepareModel, type ModelState } from './lib/localModel';
-import { TONE_COLOR, defaultMeta, mealInfo, scoreTone } from './lib/meal';
+import { TONE_COLOR, dayKey, defaultMeta, intake, mealInfo, scoreTone } from './lib/meal';
 import { SAMPLE_RESULT, SAMPLE_THUMB } from './lib/sample';
 import type { MealMeta, ScanHistoryItem } from './lib/types';
 
@@ -26,11 +26,11 @@ type Phase =
   | { kind: 'sample' }
   | { kind: 'error'; message: string };
 
-const NAV: { id: View; label: string }[] = [
-  { id: 'scan', label: '記錄一餐' },
-  { id: 'history', label: '飲食紀錄' },
-  { id: 'charts', label: '健康圖表' },
-  { id: 'guide', label: '本地模型' },
+const NAV: { id: View; label: string; icon: IconName }[] = [
+  { id: 'scan', label: '記錄一餐', icon: 'camera' },
+  { id: 'history', label: '飲食紀錄', icon: 'list' },
+  { id: 'charts', label: '健康圖表', icon: 'chart' },
+  { id: 'guide', label: '本地模型', icon: 'info' },
 ];
 
 const readView = (): View => {
@@ -187,45 +187,53 @@ export default function App() {
     isSample: true,
   };
   const recent = history.filter((h) => !h.isSample).slice(0, 4);
+  const todayKey = dayKey(new Date());
+  const todayMeals = history.filter((h) => !h.isSample && dayKey(new Date(h.meta.eatenAt)) === todayKey);
+  const todayAvg = todayMeals.length ? todayMeals.reduce((s, h) => s + h.analysisResult.sugarFriendlyScore, 0) / todayMeals.length : 0;
   const today = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
     <>
-      <header className="masthead">
-        <div className="masthead-inner">
-          <a
-            className="brand"
-            href="#"
-            onClick={(e) => {
-              e.preventDefault();
-              go('scan');
-            }}
-          >
-            <span className="brand-mark" aria-hidden="true">
-              <Icon name="leaf" size={18} />
-            </span>
+      <div className="shell">
+      <aside className="sidebar">
+        <a
+          className="brand"
+          href="#"
+          onClick={(e) => {
+            e.preventDefault();
+            go('scan');
+          }}
+        >
+          <span className="brand-mark" aria-hidden="true">
+            <Icon name="leaf" size={18} />
+          </span>
+          <span>
             <span className="brand-name">糖友善</span>
             <span className="brand-sub">飲食紀錄</span>
-          </a>
-          <nav className="nav" aria-label="主要">
-            {NAV.map((n) => (
-              <a
-                key={n.id}
-                href={`#${n.id === 'scan' ? '' : n.id}`}
-                className="nav-item"
-                aria-current={view === n.id ? 'page' : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  go(n.id);
-                }}
-              >
-                {n.label}
-              </a>
-            ))}
-          </nav>
+          </span>
+        </a>
+        <nav className="nav" aria-label="主要">
+          {NAV.map((n) => (
+            <a
+              key={n.id}
+              href={`#${n.id === 'scan' ? '' : n.id}`}
+              className="nav-item"
+              aria-current={view === n.id ? 'page' : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                go(n.id);
+              }}
+            >
+              <Icon name={n.icon} size={20} />
+              <span>{n.label}</span>
+            </a>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
           <ModelStatus state={modelState} progress={progress} onDownload={() => download().catch(() => {})} onHelp={() => go('guide')} />
+          <p>資料只存在這個瀏覽器。內容僅供飲食記錄參考，不能取代醫療建議。</p>
         </div>
-      </header>
+      </aside>
 
       <main className="page">
         {view === 'scan' && (
@@ -235,6 +243,35 @@ export default function App() {
                 <PageHead eyebrow={today} title="今天吃了什麼？">
                   拍下或貼上這一餐，Chrome 內建的 Gemini Nano 會在你的電腦上估算熱量與碳水，照片不會上傳。
                 </PageHead>
+                <dl className="today">
+                  <div>
+                    <dt>今天已記錄</dt>
+                    <dd>
+                      {todayMeals.length}
+                      <small>餐</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>熱量</dt>
+                    <dd>
+                      {Math.round(todayMeals.reduce((s, h) => s + intake(h).calories, 0)).toLocaleString()}
+                      <small>大卡</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>碳水</dt>
+                    <dd>
+                      {Math.round(todayMeals.reduce((s, h) => s + intake(h).carbs, 0))}
+                      <small>克</small>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>平均糖友善度</dt>
+                    <dd style={todayMeals.length ? { color: TONE_COLOR[scoreTone(todayAvg)] } : undefined}>
+                      {todayMeals.length ? todayAvg.toFixed(1) : '—'}
+                    </dd>
+                  </div>
+                </dl>
                 <div className="home">
                   <Dropzone onFile={onFile} />
                   <aside className="home-aside">
@@ -252,6 +289,7 @@ export default function App() {
                                 setOpenedId(h.id);
                               }}
                             >
+                              <img src={h.thumbnail} alt="" />
                               <span className="mini-meal" style={{ ['--meal' as string]: mealInfo(h.meta.mealType).color }}>
                                 {mealInfo(h.meta.mealType).label}
                               </span>
@@ -406,13 +444,7 @@ export default function App() {
 
         {view === 'guide' && <Guide state={modelState} />}
       </main>
-
-      <footer className="footer">
-        <div className="footer-inner">
-          <span>糖友善・Sugar Friendly App 網頁版</span>
-          <span>辨識使用 Chrome 內建 Prompt API，資料只存在這個瀏覽器。內容僅供飲食記錄參考，不能取代醫療建議。</span>
-        </div>
-      </footer>
+      </div>
     </>
   );
 }
