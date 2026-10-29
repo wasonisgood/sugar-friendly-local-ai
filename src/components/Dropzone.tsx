@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { ClipboardImageError, readClipboardImage } from '../lib/clipboard';
+import Icon from './Icon';
 
+/** 上傳既有的照片檔：拖放、選檔、貼上。拍照另見 CameraCapture */
 export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => void; disabled?: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const cameraRef = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -37,24 +38,19 @@ export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => vo
         if (f && !disabled) onFile(f);
       }}
     >
-      <svg className="drop-art" viewBox="0 0 120 80" aria-hidden="true">
-        <ellipse cx="60" cy="46" rx="50" ry="26" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <ellipse cx="60" cy="44" rx="34" ry="16" fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
-        <path d="M14 20 l6 -10 M106 20 l-6 -10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-      <p className="drop-title">把餐點照片拖到這裡</p>
+      <span className="drop-icon" aria-hidden="true">
+        <Icon name="upload" size={28} />
+      </span>
+      <p className="drop-title">上傳照片</p>
       <p className="drop-sub">
-        或在頁面任何地方按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上
+        把照片檔拖到這裡，或在頁面任何地方按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上
       </p>
       <div className="drop-actions">
         <button type="button" className="btn btn-primary" disabled={disabled} onClick={() => fileRef.current?.click()}>
-          選擇照片
+          選擇檔案
         </button>
         <button type="button" className="btn btn-quiet" disabled={disabled} onClick={pasteFromClipboard}>
           從剪貼簿貼上
-        </button>
-        <button type="button" className="btn btn-quiet" disabled={disabled} onClick={() => cameraRef.current?.click()}>
-          用相機拍
         </button>
       </div>
       {notice && (
@@ -63,7 +59,6 @@ export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => vo
         </p>
       )}
       <input ref={fileRef} type="file" accept="image/*" hidden onChange={pick} />
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={pick} />
     </div>
   );
 }

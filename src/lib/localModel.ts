@@ -119,7 +119,7 @@ export function prepareModel(onDownload?: (ratio: number) => void): Promise<Lang
 
 export async function analyzeFood(
   image: Blob,
-  opts: { context?: PromptContext; signal?: AbortSignal; onToken?: (charCount: number) => void } = {},
+  opts: { context?: PromptContext; signal?: AbortSignal; onToken?: (textSoFar: string) => void } = {},
 ): Promise<FoodAnalysisResult> {
   const base = await prepareModel();
   // 每次分析都從乾淨的 session 複製，避免上一張照片影響判斷
@@ -142,7 +142,7 @@ export async function analyzeFood(
     for await (const chunk of stream) {
       // 舊版 Chrome 每次回傳完整字串，新版只回傳增量
       text = chunk.startsWith(text) && text.length > 0 ? chunk : text + chunk;
-      opts.onToken?.(text.length);
+      opts.onToken?.(text);
     }
     return normalize(JSON.parse(stripFences(text)));
   } finally {

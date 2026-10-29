@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import CameraCapture from './components/CameraCapture';
 import Dropzone from './components/Dropzone';
+import { AnalyzingCard, DownloadCard } from './components/LoadingCard';
 import Guide from './components/Guide';
 import HealthCharts from './components/HealthCharts';
 import HistoryList from './components/HistoryList';
@@ -14,6 +16,7 @@ import { addHistory, addSampleData, clearHistory, loadHistory, removeHistory, re
 import { prepareImage, type PreparedImage } from './lib/image';
 import { analyzeFood, checkAvailability, prepareModel, type ModelState } from './lib/localModel';
 import { TONE_COLOR, dayKey, defaultMeta, intake, mealInfo, scoreTone } from './lib/meal';
+import { loadStats, saveStats } from './lib/progress';
 import { SAMPLE_RESULT, SAMPLE_THUMB } from './lib/sample';
 import type { MealMeta, ScanHistoryItem } from './lib/types';
 
@@ -21,7 +24,7 @@ type View = 'scan' | 'history' | 'charts' | 'guide';
 type Phase =
   | { kind: 'empty' }
   | { kind: 'ready' }
-  | { kind: 'working'; chars: number }
+  | { kind: 'working'; text: string; startedAt: number }
   | { kind: 'done'; id: string }
   | { kind: 'sample' }
   | { kind: 'error'; message: string };
@@ -49,6 +52,8 @@ export default function App() {
   const [history, setHistory] = useState<ScanHistoryItem[]>(loadHistory);
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [stats, setStats] = useState(loadStats);
   const abortRef = useRef<AbortController | null>(null);
 
   const knownPlaces = useMemo(
@@ -129,14 +134,24 @@ export default function App() {
     if (!image) return;
     const ctrl = new AbortController();
     abortRef.current = ctrl;
-    setPhase({ kind: 'working', chars: 0 });
+    setPhase({ kind: 'working', text: '', startedAt: Date.now() });
     try {
       if (modelState !== 'available') await download();
+      const startedAt = Date.now();
+      let firstAt = 0;
+      let finalText = '';
+      setPhase({ kind: 'working', text: '', startedAt });
       const result = await analyzeFood(image.blob, {
         context: { notes: meta.notes, placeName: meta.placeName, mealLabel: mealInfo(meta.mealType).label },
         signal: ctrl.signal,
-        onToken: (chars) => setPhase({ kind: 'working', chars }),
+        onToken: (text) => {
+          if (!firstAt) firstAt = Date.now();
+          finalText = text;
+          setPhase({ kind: 'working', text, startedAt });
+        },
       });
+      saveStats({ ms: Date.now() - startedAt, firstMs: (firstAt || Date.now()) - startedAt, chars: finalText.length });
+      setStats(loadStats());
       const saved = addHistory(image.thumbnail, result, meta);
       setHistory(saved.items);
       setPhase({ kind: 'done', id: saved.id });
@@ -272,8 +287,23 @@ export default function App() {
                     </dd>
                   </div>
                 </dl>
+                {modelState === 'downloading' && <DownloadCard ratio={progress} />}
                 <div className="home">
-                  <Dropzone onFile={onFile} />
+                  <div className="capture">
+                    <Dropzone onFile={onFile} />
+                    <button type="button" className="camera-tile" onClick={() => setCameraOpen(true)}>
+                      <span className="camera-tile-icon" aria-hidden="true">
+                        <Icon name="camera" size={26} />
+                      </span>
+                      <span className="camera-tile-text">
+                        <b>用相機拍</b>
+                        <span>打開電腦或手機的鏡頭，直接拍下桌上這一餐</span>
+                      </span>
+                      <span className="camera-tile-go" aria-hidden="true">
+                        →
+                      </span>
+                    </button>
+                  </div>
                   <aside className="home-aside">
                     <h2 className="side-title">最近幾餐</h2>
                     {recent.length === 0 ? (
@@ -304,7 +334,7 @@ export default function App() {
                     )}
                     <h2 className="side-title">記錄的順序</h2>
                     <ol className="side-steps">
-                      <li>放一張照片：選檔、拍照或 Ctrl + V</li>
+                      <li>上傳照片、貼上截圖，或用相機直接拍</li>
                       <li>補上時間、餐別、地點，有量血糖就一起填</li>
                       <li>按「開始辨識」，結果會存進紀錄與圖表</li>
                     </ol>
@@ -320,37 +350,46 @@ export default function App() {
                 </PageHead>
                 <div className="compose">
                   <div className="compose-photo">
-                    <figure className="photo">
-                      <img src={image.previewUrl} alt="待辨識的餐點" />
-                      {phase.kind === 'working' && (
-                        <figcaption className="working" role="status">
-                          <span className="spinner" aria-hidden="true" />
-                          {modelState === 'downloading'
-                            ? `正在下載模型 ${progress !== null ? Math.round(progress * 100) + '%' : ''}`
-                            : phase.chars === 0
-                              ? '模型正在看這張照片⋯'
-                              : `正在寫分析（${phase.chars} 字）`}
-                        </figcaption>
-                      )}
+                    <figure className={`photo${phase.kind === 'working' && modelState !== 'downloading' ? ' is-scanning' : ''}`}>
+                      <div className="photo-frame">
+                        <img src={image.previewUrl} alt="待辨識的餐點" />
+                        <div className="scan" aria-hidden="true">
+                          <i className="scan-line" />
+                          <i className="scan-corner tl" />
+                          <i className="scan-corner tr" />
+                          <i className="scan-corner bl" />
+                          <i className="scan-corner br" />
+                        </div>
+                      </div>
                     </figure>
-                    <p className="fine">
-                      換照片：直接 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上新的，或
-                      <button type="button" className="link-btn" onClick={reset} disabled={phase.kind === 'working'}>
-                        重新選擇
-                      </button>
-                    </p>
+                    {phase.kind !== 'working' && (
+                      <p className="fine">
+                        換照片：直接 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上，
+                        <button type="button" className="link-btn" onClick={() => setCameraOpen(true)}>
+                          重拍
+                        </button>
+                        ，或
+                        <button type="button" className="link-btn" onClick={reset}>
+                          重新選擇
+                        </button>
+                      </p>
+                    )}
                   </div>
 
                   <div className="compose-form">
+                    {phase.kind === 'working' &&
+                      (modelState === 'downloading' ? (
+                        <DownloadCard ratio={progress} />
+                      ) : (
+                        <AnalyzingCard text={phase.text} startedAt={phase.startedAt} stats={stats} onCancel={() => abortRef.current?.abort()} />
+                      ))}
                     <MealForm value={meta} onChange={setMeta} knownPlaces={knownPlaces} photoTime={photoTime} disabled={phase.kind === 'working'} />
 
                     {phase.kind === 'error' && <p className="alert">{phase.message}</p>}
 
                     <div className="action-bar">
                       {phase.kind === 'working' ? (
-                        <button type="button" className="btn btn-quiet" onClick={() => abortRef.current?.abort()}>
-                          取消
-                        </button>
+                        <span className="fine">辨識中，用餐資訊暫時不能修改。</span>
                       ) : (
                         <button type="button" className="btn btn-primary" disabled={!canRun} onClick={run}>
                           {modelState === 'downloadable' ? '下載模型並辨識' : '開始辨識'}
@@ -445,6 +484,18 @@ export default function App() {
         {view === 'guide' && <Guide state={modelState} />}
       </main>
       </div>
+
+      {cameraOpen && (
+        <CameraCapture
+          onClose={() => setCameraOpen(false)}
+          onCapture={(f) => {
+            setCameraOpen(false);
+            setOpenedId(null);
+            if (location.hash) location.hash = '';
+            onFile(f);
+          }}
+        />
+      )}
     </>
   );
 }

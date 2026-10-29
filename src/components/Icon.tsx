@@ -21,6 +21,8 @@ const PATHS = {
   warn: 'M12 4 3 20h18zM12 10v4M12 17v.01',
   calendar: 'M4 6h16v14H4zM4 10h16M8 3v5M16 3v5',
   download: 'M12 4v11M7 10l5 5 5-5M5 20h14',
+  switch: 'M5 10a7 7 0 0 1 12.5-3.5L19 8M19 4v4h-4M19 14a7 7 0 0 1-12.5 3.5L5 16M5 20v-4h4',
+  upload: 'M12 16V5M7 10l5-5 5 5M5 19h14',
 } as const;
 
 export type IconName = keyof typeof PATHS;
