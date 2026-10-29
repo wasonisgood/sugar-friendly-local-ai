@@ -47,13 +47,13 @@ export default function Dropzone({ onFile, disabled }: { onFile: (f: File) => vo
         或在頁面任何地方按 <kbd>Ctrl</kbd> + <kbd>V</kbd> 貼上
       </p>
       <div className="drop-actions">
-        <button type="button" className="btn" disabled={disabled} onClick={() => fileRef.current?.click()}>
+        <button type="button" className="btn btn-primary" disabled={disabled} onClick={() => fileRef.current?.click()}>
           選擇照片
         </button>
-        <button type="button" className="btn btn-ghost" disabled={disabled} onClick={pasteFromClipboard}>
+        <button type="button" className="btn btn-outline" disabled={disabled} onClick={pasteFromClipboard}>
           從剪貼簿貼上
         </button>
-        <button type="button" className="btn btn-ghost" disabled={disabled} onClick={() => cameraRef.current?.click()}>
+        <button type="button" className="btn btn-outline" disabled={disabled} onClick={() => cameraRef.current?.click()}>
           用相機拍
         </button>
       </div>

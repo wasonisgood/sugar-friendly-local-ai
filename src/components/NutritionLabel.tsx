@@ -12,16 +12,15 @@ const ROWS: { key: keyof NutritionalInfo; label: string; unit: string; indent?: 
 
 const fmt = (n: number) => (n >= 100 ? Math.round(n).toString() : (Math.round(n * 10) / 10).toString());
 
-export default function NutritionLabel({ info }: { info: NutritionalInfo }) {
+export default function NutritionLabel({ per100, serving, grams }: { per100: NutritionalInfo; serving: NutritionalInfo; grams: number }) {
   return (
     <table className="nlabel">
-      <caption>
-        營養標示 <span>估算值</span>
-      </caption>
+      <caption>營養標示（估算）</caption>
       <thead>
         <tr>
           <th scope="col"></th>
           <th scope="col">每 100 公克</th>
+          <th scope="col">這一份 {Math.round(grams)} 公克</th>
         </tr>
       </thead>
       <tbody>
@@ -29,7 +28,10 @@ export default function NutritionLabel({ info }: { info: NutritionalInfo }) {
           <tr key={r.key} className={r.indent ? 'is-sub' : undefined}>
             <th scope="row">{r.label}</th>
             <td>
-              {fmt(info[r.key])} <small>{r.unit}</small>
+              {fmt(per100[r.key])} <small>{r.unit}</small>
+            </td>
+            <td className="strong">
+              {fmt(serving[r.key])} <small>{r.unit}</small>
             </td>
           </tr>
         ))}

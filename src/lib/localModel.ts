@@ -21,7 +21,7 @@ const RESPONSE_SCHEMA = {
   required: [
     'confidence', 'foodName', 'category', 'sugarFriendlyScore', 'healthScore',
     'nutritionalInfo', 'recommendations', 'warnings', 'diabeticAdvice',
-    'generalHealthAdvice', 'portionSizeAdvice', 'healthBenefits',
+    'generalHealthAdvice', 'portionSizeAdvice', 'healthBenefits', 'estimatedServingGrams',
   ],
   properties: {
     confidence: { type: 'number', minimum: 0, maximum: 1 },
@@ -48,10 +48,22 @@ const RESPONSE_SCHEMA = {
     generalHealthAdvice: { type: 'string' },
     portionSizeAdvice: { type: 'string' },
     healthBenefits: { type: 'array', items: { type: 'string' }, maxItems: 4 },
+    estimatedServingGrams: { type: 'number', minimum: 0 },
   },
 };
 
-function buildPrompt(notes?: string): string {
+export interface PromptContext {
+  notes?: string;
+  placeName?: string;
+  mealLabel?: string;
+}
+
+function buildPrompt(ctx: PromptContext): string {
+  const extra = [
+    ctx.mealLabel && `餐別：${ctx.mealLabel}`,
+    ctx.placeName && `地點：${ctx.placeName}`,
+    ctx.notes && `使用者補充：${ctx.notes}`,
+  ].filter(Boolean);
   return [
     '請辨識這張照片裡的食物，並依 JSON 格式回覆：',
     '- foodName：食物名稱；若有多道菜，用「、」列出主要的幾道',
@@ -66,7 +78,8 @@ function buildPrompt(notes?: string): string {
     '- generalHealthAdvice：給一般人的一段建議',
     '- portionSizeAdvice：建議份量，用拳頭、手掌、碗等生活化單位描述',
     '- healthBenefits：這道食物的好處，最多 3 點',
-    notes ? `\n使用者補充：${notes}` : '',
+    '- estimatedServingGrams：照片中這一份的總重量估計（公克）',
+    extra.length ? `\n參考資訊（可能有助辨識）：\n${extra.map((s) => String(s).trim()).join('\n')}` : '',
   ].join('\n');
 }
 
@@ -106,7 +119,7 @@ export function prepareModel(onDownload?: (ratio: number) => void): Promise<Lang
 
 export async function analyzeFood(
   image: Blob,
-  opts: { notes?: string; signal?: AbortSignal; onToken?: (charCount: number) => void } = {},
+  opts: { context?: PromptContext; signal?: AbortSignal; onToken?: (charCount: number) => void } = {},
 ): Promise<FoodAnalysisResult> {
   const base = await prepareModel();
   // 每次分析都從乾淨的 session 複製，避免上一張照片影響判斷
@@ -117,7 +130,7 @@ export async function analyzeFood(
         {
           role: 'user',
           content: [
-            { type: 'text', value: buildPrompt(opts.notes?.trim()) },
+            { type: 'text', value: buildPrompt(opts.context ?? {}) },
             { type: 'image', value: image },
           ],
         },
@@ -171,5 +184,6 @@ function normalize(raw: any): FoodAnalysisResult {
     generalHealthAdvice: str(raw?.generalHealthAdvice),
     portionSizeAdvice: str(raw?.portionSizeAdvice),
     healthBenefits: list(raw?.healthBenefits),
+    estimatedServingGrams: Number(raw?.estimatedServingGrams) > 0 ? Math.round(clamp(raw.estimatedServingGrams, 1, 3000)) : undefined,
   };
 }

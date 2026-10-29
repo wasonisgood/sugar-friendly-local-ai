@@ -29,12 +29,12 @@ export default function ModelStatus({
         {state === 'downloading' && progress !== null && ` ${Math.round(progress * 100)}%`}
       </span>
       {state === 'downloadable' && (
-        <button type="button" className="link" onClick={onDownload}>
+        <button type="button" className="btn-text" onClick={onDownload}>
           現在下載
         </button>
       )}
       {(state === 'unsupported' || state === 'unavailable') && (
-        <button type="button" className="link" onClick={onHelp}>
+        <button type="button" className="btn-text" onClick={onHelp}>
           怎麼開啟？
         </button>
       )}
