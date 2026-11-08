@@ -1,18 +1,21 @@
 import { useMemo, useState } from 'react';
-import { MEAL_TYPES, PLACE_TYPES, TONE_COLOR, dayKey, intake, mealInfo, placeLabel, scoreTone } from '../lib/meal';
-import type { MealType, PlaceType, ScanHistoryItem } from '../lib/types';
+import { MEAL_TYPES, PLACE_TYPES, TONE_COLOR, ateLabel, dayKey, intake, mealInfo, placeLabel, scoreTone, symptomLabel } from '../lib/meal';
+import { scoreOf, type Mode } from '../lib/modes';
+import type { AnyItem, MealType, PlaceType } from '../lib/types';
 import Icon from './Icon';
 import PageHead from './PageHead';
 
 export default function HistoryList({
+  mode,
   items,
   onOpen,
   onRemove,
   onClear,
   onSample,
 }: {
-  items: ScanHistoryItem[];
-  onOpen: (item: ScanHistoryItem) => void;
+  mode: Mode;
+  items: AnyItem[];
+  onOpen: (item: AnyItem) => void;
   onRemove: (id: string) => void;
   onClear: () => void;
   onSample: (on: boolean) => void;
@@ -27,7 +30,7 @@ export default function HistoryList({
   );
 
   const groups = useMemo(() => {
-    const g = new Map<string, ScanHistoryItem[]>();
+    const g = new Map<string, AnyItem[]>();
     for (const it of filtered) {
       const k = dayKey(new Date(it.meta.eatenAt));
       g.set(k, [...(g.get(k) ?? []), it]);
@@ -40,7 +43,7 @@ export default function HistoryList({
       <>
         <PageHead eyebrow="飲食紀錄" title="這裡還是空的" />
         <div className="blank">
-          <p>每次辨識完成，那一餐會連同時間、地點與血糖存在這裡，只留在這個瀏覽器。</p>
+          <p>每次辨識完成，那一餐會連同時間、地點與{mode === 'sugar' ? '血糖' : '吃完多少、餐後不適'}存在這裡，只留在這個瀏覽器。</p>
           <p>想先看看排起來的樣子，可以放入四週的示範資料，之後一鍵移除。</p>
           <button type="button" className="btn btn-quiet" onClick={() => onSample(true)}>
             放入示範資料
@@ -83,7 +86,7 @@ export default function HistoryList({
         }
       >
         {filtered.length !== items.length && `篩選後 ${filtered.length} 餐。`}
-        點一列看完整分析，也能補填餐後血糖。
+        {mode === 'sugar' ? '點一列看完整分析，也能補填餐後血糖。' : '點一列看完整分析，也能補填吃完多少與餐後不適。'}
       </PageHead>
 
       <div className="timeline">
@@ -91,6 +94,7 @@ export default function HistoryList({
           const d = new Date(`${day}T00:00`);
           const kcal = list.reduce((s, i) => s + intake(i).calories, 0);
           const carbs = list.reduce((s, i) => s + intake(i).carbs, 0);
+          const protein = list.reduce((s, i) => s + intake(i).protein, 0);
           return (
             <section key={day} className="tl-day">
               <div className="tl-date">
@@ -100,14 +104,16 @@ export default function HistoryList({
                 </span>
                 <span className="tl-sum">
                   <span>{Math.round(kcal).toLocaleString()} 大卡</span>
-                  <span>碳水 {Math.round(carbs)} 克</span>
+                  <span>{mode === 'sugar' ? `碳水 ${Math.round(carbs)} 克` : `蛋白質 ${Math.round(protein)} 克`}</span>
                 </span>
               </div>
               <ul className="tl-meals">
                 {list.map((it) => {
                   const r = it.analysisResult;
                   const m = mealInfo(it.meta.mealType);
-                  const tone = scoreTone(r.sugarFriendlyScore);
+                  const score = scoreOf(r);
+                  const tone = scoreTone(score);
+                  const n = intake(it);
                   return (
                     <li key={it.id} className="tl-meal" style={{ ['--meal' as string]: m.color, ['--tone' as string]: TONE_COLOR[tone] }}>
                       <button type="button" className="tl-open" onClick={() => onOpen(it)}>
@@ -119,12 +125,15 @@ export default function HistoryList({
                         <span className="tl-text">
                           <span className="tl-name">{r.foodName}</span>
                           <span className="tl-sub">
-                            {it.meta.placeName || placeLabel(it.meta.placeType)}・{Math.round(intake(it).calories)} 大卡・碳水 {Math.round(intake(it).carbs)} 克
+                            {it.meta.placeName || placeLabel(it.meta.placeType)}・{Math.round(n.calories)} 大卡
+                            {mode === 'sugar' ? `・碳水 ${Math.round(n.carbs)} 克` : `・蛋白質 ${Math.round(n.protein)} 克`}
                             {it.meta.bloodSugarAfter != null && `・餐後 ${it.meta.bloodSugarAfter}`}
+                            {it.meta.ateRatio != null && it.meta.ateRatio < 1 && `・吃了${ateLabel(it.meta.ateRatio)}`}
+                            {it.meta.symptoms?.length ? `・${it.meta.symptoms.map(symptomLabel).join('、')}` : ''}
                             {it.isSample && '・示範'}
                           </span>
                         </span>
-                        <span className="tl-score">{r.sugarFriendlyScore}</span>
+                        <span className="tl-score">{score}</span>
                       </button>
                       <button type="button" className="icon-btn" aria-label={`刪除 ${r.foodName}`} onClick={() => onRemove(it.id)}>
                         <Icon name="trash" size={16} />

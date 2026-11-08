@@ -1,26 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import CameraCapture from './components/CameraCapture';
+import ChatPage from './components/ChatPage';
+import BodyCard from './components/BodyCard';
 import Dropzone from './components/Dropzone';
 import { AnalyzingCard, DownloadCard } from './components/LoadingCard';
+import Glp1Charts from './components/Glp1Charts';
+import Glp1ResultSheet from './components/Glp1ResultSheet';
 import Guide from './components/Guide';
 import HealthCharts from './components/HealthCharts';
 import HistoryList from './components/HistoryList';
 import Icon, { type IconName } from './components/Icon';
 import MealForm from './components/MealForm';
 import MetaEditor from './components/MetaEditor';
+import ModeSwitch from './components/ModeSwitch';
 import ModelStatus from './components/ModelStatus';
 import PageHead from './components/PageHead';
 import ResultSheet from './components/ResultSheet';
+import WindowsAiInventoryWidget from './components/WindowsAiInventoryWidget';
 import { imageFromPasteEvent } from './lib/clipboard';
-import { addHistory, addSampleData, clearHistory, loadHistory, removeHistory, removeSampleData, updateMeta } from './lib/history';
+import { addSampleBody, clearBody, loadBody, removeSampleBody, upsertBody } from './lib/body';
+import { proteinGoal } from './lib/glp1Stats';
+import { glp1Store, storeFor, sugarStore } from './lib/history';
 import { prepareImage, type PreparedImage } from './lib/image';
-import { analyzeFood, checkAvailability, prepareModel, type ModelState } from './lib/localModel';
+import { NO_IMAGE_MESSAGE, analyzeFood, checkAvailability, prepareModel, switchModel, type ModelState } from './lib/localModel';
 import { TONE_COLOR, dayKey, defaultMeta, intake, mealInfo, scoreTone } from './lib/meal';
+import { MODES, loadMode, mentionsGlp1, saveMode, scoreOf, type Mode } from './lib/modes';
 import { loadStats, saveStats } from './lib/progress';
 import { SAMPLE_RESULT, SAMPLE_THUMB } from './lib/sample';
-import type { MealMeta, ScanHistoryItem } from './lib/types';
+import { GLP1_SAMPLE_RESULT, GLP1_SAMPLE_THUMB } from './lib/sampleGlp1';
+import type { AnyItem, BodyEntry, Glp1Item, MealMeta, ScanHistoryItem } from './lib/types';
 
-type View = 'scan' | 'history' | 'charts' | 'guide';
+type View = 'scan' | 'history' | 'charts' | 'chat' | 'guide';
 type Phase =
   | { kind: 'empty' }
   | { kind: 'ready' }
@@ -33,15 +43,21 @@ const NAV: { id: View; label: string; icon: IconName }[] = [
   { id: 'scan', label: '記錄一餐', icon: 'camera' },
   { id: 'history', label: '飲食紀錄', icon: 'list' },
   { id: 'charts', label: '健康圖表', icon: 'chart' },
+  { id: 'chat', label: '問健康助理', icon: 'chat' },
   { id: 'guide', label: '本地模型', icon: 'info' },
 ];
 
 const readView = (): View => {
   const h = location.hash.replace('#', '');
-  return h === 'history' || h === 'charts' || h === 'guide' ? h : 'scan';
+  return h === 'history' || h === 'charts' || h === 'chat' || h === 'guide' ? h : 'scan';
 };
 
+function Sheet({ mode, item, onEdit }: { mode: Mode; item: AnyItem; onEdit?: () => void }) {
+  return mode === 'glp1' ? <Glp1ResultSheet item={item as Glp1Item} onEdit={onEdit} /> : <ResultSheet item={item as ScanHistoryItem} onEdit={onEdit} />;
+}
+
 export default function App() {
+  const [mode, setMode] = useState<Mode>(loadMode);
   const [view, setView] = useState<View>(readView);
   const [modelState, setModelState] = useState<ModelState>('checking');
   const [progress, setProgress] = useState<number | null>(null);
@@ -49,11 +65,15 @@ export default function App() {
   const [photoTime, setPhotoTime] = useState<Date | undefined>();
   const [meta, setMeta] = useState<MealMeta>(defaultMeta);
   const [phase, setPhase] = useState<Phase>({ kind: 'empty' });
-  const [history, setHistory] = useState<ScanHistoryItem[]>(loadHistory);
+  const [history, setHistory] = useState<AnyItem[]>(() => storeFor(mode).load());
+  const [body, setBody] = useState<BodyEntry[]>(loadBody);
+  const [switched, setSwitched] = useState<Mode | null>(null);
   const [openedId, setOpenedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [stats, setStats] = useState(loadStats);
+  const [winWidgetOpen, setWinWidgetOpen] = useState(false);
+  const [stats, setStats] = useState(() => loadStats(mode));
+  const profile = MODES[mode];
   const abortRef = useRef<AbortController | null>(null);
 
   const knownPlaces = useMemo(
@@ -61,8 +81,17 @@ export default function App() {
     [history],
   );
 
+  // 色票跟著模式換：styles.css 以 [data-mode] 覆寫變數
   useEffect(() => {
-    checkAvailability().then(setModelState);
+    document.documentElement.dataset.mode = mode;
+    document.title = mode === 'glp1' ? '輕盈・瘦瘦針飲控紀錄' : '糖友善飲食紀錄';
+  }, [mode]);
+
+  useEffect(() => {
+    checkAvailability().then((s) => {
+      setModelState(s);
+      switchModel(mode, s); // 模型已在本機就先暖機
+    });
     const onHash = () => {
       setView(readView());
       setOpenedId(null);
@@ -84,7 +113,7 @@ export default function App() {
     setModelState('downloading');
     setProgress(0);
     try {
-      await prepareModel((r) => setProgress(r));
+      await prepareModel(mode, (r) => setProgress(r));
       setModelState('available');
     } catch (e) {
       setModelState(await checkAvailability());
@@ -92,7 +121,7 @@ export default function App() {
     } finally {
       setProgress(null);
     }
-  }, []);
+  }, [mode]);
 
   const onFile = useCallback(async (file: File) => {
     try {
@@ -116,6 +145,26 @@ export default function App() {
 
   // 全頁 Ctrl+V：任何畫面都能直接貼上圖片（辨識中除外）
   const busy = phase.kind === 'working';
+  const switchLocked = busy || modelState === 'downloading';
+
+  /** 切換模式：紀錄、色票、提示詞一起換；已選的照片與用餐資訊保留，可直接用新模式辨識 */
+  const switchMode = (m: Mode) => {
+    if (switchLocked || m === mode) return;
+    saveMode(m);
+    setMode(m);
+    setHistory(storeFor(m).load());
+    setStats(loadStats(m));
+    setOpenedId(null);
+    setEditing(false);
+    switchModel(m, modelState);
+    if (phase.kind === 'done' || phase.kind === 'sample' || phase.kind === 'error') setPhase(image ? { kind: 'ready' } : { kind: 'empty' });
+    setSwitched(m);
+  };
+  useEffect(() => {
+    if (!switched) return;
+    const t = window.setTimeout(() => setSwitched(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [switched]);
   useEffect(() => {
     if (busy) return;
     const onPaste = (e: ClipboardEvent) => {
@@ -141,7 +190,7 @@ export default function App() {
       let firstAt = 0;
       let finalText = '';
       setPhase({ kind: 'working', text: '', startedAt });
-      const result = await analyzeFood(image.blob, {
+      const result = await analyzeFood(mode, image.blob, {
         context: { notes: meta.notes, placeName: meta.placeName, mealLabel: mealInfo(meta.mealType).label },
         signal: ctrl.signal,
         onToken: (text) => {
@@ -150,9 +199,9 @@ export default function App() {
           setPhase({ kind: 'working', text, startedAt });
         },
       });
-      saveStats({ ms: Date.now() - startedAt, firstMs: (firstAt || Date.now()) - startedAt, chars: finalText.length });
-      setStats(loadStats());
-      const saved = addHistory(image.thumbnail, result, meta);
+      saveStats(mode, { ms: Date.now() - startedAt, firstMs: (firstAt || Date.now()) - startedAt, chars: finalText.length });
+      setStats(loadStats(mode));
+      const saved = 'glp1Score' in result ? glp1Store.add(image.thumbnail, result, meta) : sugarStore.add(image.thumbnail, result, meta);
       setHistory(saved.items);
       setPhase({ kind: 'done', id: saved.id });
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -166,7 +215,7 @@ export default function App() {
         e instanceof SyntaxError
           ? '模型回覆的格式不完整，請再試一次，或換一張比較清楚的照片。'
           : e instanceof Error && e.name === 'NotSupportedError'
-            ? '這版 Chrome 的內建模型還不支援圖片輸入，請到「本地模型」頁開啟多模態設定。'
+            ? NO_IMAGE_MESSAGE()
             : `辨識失敗：${e instanceof Error ? e.message : String(e)}`;
       setPhase({ kind: 'error', message: msg });
     } finally {
@@ -183,20 +232,24 @@ export default function App() {
     setEditing(false);
   };
 
+  const store = storeFor(mode);
   const saveMeta = (id: string, m: MealMeta) => {
-    setHistory(updateMeta(id, m));
+    setHistory(store.updateMeta(id, m));
     setEditing(false);
   };
 
-  const toggleSample = (on: boolean) => setHistory(on ? addSampleData() : removeSampleData());
+  const toggleSample = (on: boolean) => {
+    setHistory(on ? store.addSamples() : store.removeSamples());
+    if (mode === 'glp1') setBody(on ? addSampleBody() : removeSampleBody());
+  };
 
   const canRun = modelState === 'available' || modelState === 'downloadable';
   const doneItem = phase.kind === 'done' ? history.find((h) => h.id === phase.id) : undefined;
   const openedItem = openedId ? history.find((h) => h.id === openedId) : undefined;
-  const sampleItem: ScanHistoryItem = {
+  const sampleItem: AnyItem = {
     id: 'preview',
-    thumbnail: SAMPLE_THUMB,
-    analysisResult: SAMPLE_RESULT,
+    thumbnail: mode === 'glp1' ? GLP1_SAMPLE_THUMB : SAMPLE_THUMB,
+    analysisResult: mode === 'glp1' ? GLP1_SAMPLE_RESULT : SAMPLE_RESULT,
     timestamp: new Date().toISOString(),
     meta,
     isSample: true,
@@ -204,7 +257,9 @@ export default function App() {
   const recent = history.filter((h) => !h.isSample).slice(0, 4);
   const todayKey = dayKey(new Date());
   const todayMeals = history.filter((h) => !h.isSample && dayKey(new Date(h.meta.eatenAt)) === todayKey);
-  const todayAvg = todayMeals.length ? todayMeals.reduce((s, h) => s + h.analysisResult.sugarFriendlyScore, 0) / todayMeals.length : 0;
+  const todayAvg = todayMeals.length ? todayMeals.reduce((s, h) => s + scoreOf(h.analysisResult), 0) / todayMeals.length : 0;
+  const todayProtein = todayMeals.reduce((s, h) => s + intake(h).protein, 0);
+  const goal = proteinGoal(body);
   const today = new Date().toLocaleDateString('zh-TW', { month: 'long', day: 'numeric', weekday: 'long' });
 
   return (
@@ -223,10 +278,11 @@ export default function App() {
             <Icon name="leaf" size={18} />
           </span>
           <span>
-            <span className="brand-name">糖友善</span>
-            <span className="brand-sub">飲食紀錄</span>
+            <span className="brand-name">{profile.name}</span>
+            <span className="brand-sub">{profile.sub}</span>
           </span>
         </a>
+        <ModeSwitch mode={mode} onChange={switchMode} disabled={switchLocked} />
         <nav className="nav" aria-label="主要">
           {NAV.map((n) => (
             <a
@@ -245,19 +301,41 @@ export default function App() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <ModelStatus state={modelState} progress={progress} onDownload={() => download().catch(() => {})} onHelp={() => go('guide')} />
+          <ModelStatus state={modelState} progress={progress} onDownload={() => download().catch(() => {})} onHelp={() => setWinWidgetOpen(true)} />
+          <button type="button" className="btn-win-inventory-trigger" onClick={() => setWinWidgetOpen(true)}>
+            ◫ 瀏覽器 AI 庫存指引
+          </button>
           <p>資料只存在這個瀏覽器。內容僅供飲食記錄參考，不能取代醫療建議。</p>
         </div>
       </aside>
 
       <main className="page">
+        {switched && (
+          <p className="mode-toast" role="status">
+            已切換到「{MODES[switched].switchLabel}」：紀錄、圖表與辨識建議都換成這個模式{image ? '，照片保留著，可以直接辨識' : ''}。
+          </p>
+        )}
         {view === 'scan' && (
           <>
+            {(modelState === 'unsupported' || modelState === 'unavailable') && (
+              <div className="win-banner-callout" onClick={() => setWinWidgetOpen(true)}>
+                <span className="banner-icon">◫</span>
+                <div className="banner-text">
+                  <strong>尚未開啟瀏覽器內建 AI (Gemini Nano)</strong>
+                  <span>點此開啟「Windows 系統選用功能 · 瀏覽器 AI 庫存說明框」查看一鍵啟用步驟</span>
+                </div>
+                <button type="button" className="banner-btn">開啟指引 ➔</button>
+              </div>
+            )}
             {phase.kind === 'empty' && (
               <>
                 <PageHead eyebrow={today} title="今天吃了什麼？">
-                  拍下或貼上這一餐，Chrome 內建的 Gemini Nano 會在你的電腦上估算熱量與碳水，照片不會上傳。
+                  {mode === 'sugar'
+                    ? '拍下或貼上這一餐，Chrome 內建的 Gemini Nano 會在你的電腦上估算熱量與碳水，照片不會上傳。'
+                    : '拍下或貼上這一餐，Chrome 內建的 Gemini Nano 會在你的電腦上估算蛋白質、熱量與腸胃負擔，照片不會上傳。'}
                 </PageHead>
+                {mode === 'glp1' && <BodyCard body={body} onChange={(d, patch) => setBody(upsertBody(d, patch))} />}
+                {mode === 'sugar' ? (
                 <dl className="today">
                   <div>
                     <dt>今天已記錄</dt>
@@ -287,6 +365,37 @@ export default function App() {
                     </dd>
                   </div>
                 </dl>
+                ) : (
+                  <dl className="today">
+                    <div>
+                      <dt>今天已記錄</dt>
+                      <dd>
+                        {todayMeals.length}
+                        <small>餐</small>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>蛋白質</dt>
+                      <dd>
+                        {Math.round(todayProtein)}
+                        <small>／{goal} 克</small>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>熱量</dt>
+                      <dd>
+                        {Math.round(todayMeals.reduce((s, h) => s + intake(h).calories, 0)).toLocaleString()}
+                        <small>大卡</small>
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>平均飲控友善度</dt>
+                      <dd style={todayMeals.length ? { color: TONE_COLOR[scoreTone(todayAvg)] } : undefined}>
+                        {todayMeals.length ? todayAvg.toFixed(1) : '—'}
+                      </dd>
+                    </div>
+                  </dl>
+                )}
                 {modelState === 'downloading' && <DownloadCard ratio={progress} />}
                 <div className="home">
                   <div className="capture">
@@ -324,8 +433,8 @@ export default function App() {
                                 {mealInfo(h.meta.mealType).label}
                               </span>
                               <span className="mini-name">{h.analysisResult.foodName}</span>
-                              <span className="mini-score" style={{ color: TONE_COLOR[scoreTone(h.analysisResult.sugarFriendlyScore)] }}>
-                                {h.analysisResult.sugarFriendlyScore}
+                              <span className="mini-score" style={{ color: TONE_COLOR[scoreTone(scoreOf(h.analysisResult))] }}>
+                                {scoreOf(h.analysisResult)}
                               </span>
                             </button>
                           </li>
@@ -335,7 +444,7 @@ export default function App() {
                     <h2 className="side-title">記錄的順序</h2>
                     <ol className="side-steps">
                       <li>上傳照片、貼上截圖，或用相機直接拍</li>
-                      <li>補上時間、餐別、地點，有量血糖就一起填</li>
+                      <li>{mode === 'sugar' ? '補上時間、餐別、地點，有量血糖就一起填' : '補上時間、餐別，吃完後再填吃了多少、有沒有不舒服'}</li>
                       <li>按「開始辨識」，結果會存進紀錄與圖表</li>
                     </ol>
                   </aside>
@@ -381,9 +490,17 @@ export default function App() {
                       (modelState === 'downloading' ? (
                         <DownloadCard ratio={progress} />
                       ) : (
-                        <AnalyzingCard text={phase.text} startedAt={phase.startedAt} stats={stats} onCancel={() => abortRef.current?.abort()} />
+                        <AnalyzingCard mode={mode} text={phase.text} startedAt={phase.startedAt} stats={stats} onCancel={() => abortRef.current?.abort()} />
                       ))}
-                    <MealForm value={meta} onChange={setMeta} knownPlaces={knownPlaces} photoTime={photoTime} disabled={phase.kind === 'working'} />
+                    {mode === 'sugar' && mentionsGlp1(meta.notes) && phase.kind !== 'working' && (
+                      <p className="mode-hint">
+                        備註提到瘦瘦針。改用「瘦瘦針飲控」模式，建議會著重蛋白質、份量與腸胃不適。
+                        <button type="button" className="link-btn" onClick={() => switchMode('glp1')}>
+                          切換並保留這張照片
+                        </button>
+                      </p>
+                    )}
+                    <MealForm mode={mode} value={meta} onChange={setMeta} knownPlaces={knownPlaces} photoTime={photoTime} disabled={phase.kind === 'working'} />
 
                     {phase.kind === 'error' && <p className="alert">{phase.message}</p>}
 
@@ -429,9 +546,9 @@ export default function App() {
                     <Icon name="check" size={16} /> 已存進飲食紀錄
                   </p>
                 )}
-                <ResultSheet item={doneItem ?? sampleItem} onEdit={doneItem && !editing ? () => setEditing(true) : undefined} />
+                <Sheet mode={mode} item={doneItem ?? sampleItem} onEdit={doneItem && !editing ? () => setEditing(true) : undefined} />
                 {doneItem && editing && (
-                  <MetaEditor item={doneItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(doneItem.id, m)} onCancel={() => setEditing(false)} />
+                  <MetaEditor mode={mode} item={doneItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(doneItem.id, m)} onCancel={() => setEditing(false)} />
                 )}
                 <div className="page-foot">
                   <button type="button" className="btn btn-primary" onClick={reset}>
@@ -461,27 +578,40 @@ export default function App() {
               >
                 ← 飲食紀錄
               </button>
-              <ResultSheet item={openedItem} onEdit={!editing ? () => setEditing(true) : undefined} />
+              <Sheet mode={mode} item={openedItem} onEdit={!editing ? () => setEditing(true) : undefined} />
               {editing && (
-                <MetaEditor item={openedItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(openedItem.id, m)} onCancel={() => setEditing(false)} />
+                <MetaEditor mode={mode} item={openedItem} knownPlaces={knownPlaces} onSave={(m) => saveMeta(openedItem.id, m)} onCancel={() => setEditing(false)} />
               )}
             </>
           ) : (
             <HistoryList
+              mode={mode}
               items={history}
               onOpen={(it) => {
                 setOpenedId(it.id);
                 window.scrollTo({ top: 0 });
               }}
-              onRemove={(id) => setHistory(removeHistory(id))}
-              onClear={() => setHistory(clearHistory())}
+              onRemove={(id) => setHistory(store.remove(id))}
+              onClear={() => {
+                setHistory(store.clear());
+                if (mode === 'glp1') setBody(clearBody());
+              }}
               onSample={toggleSample}
             />
           ))}
 
-        {view === 'charts' && <HealthCharts items={history} onSample={toggleSample} />}
+        {view === 'charts' &&
+          (mode === 'glp1' ? (
+            <Glp1Charts key="glp1" items={history as Glp1Item[]} body={body} onSample={toggleSample} />
+          ) : (
+            <HealthCharts key="sugar" items={history as ScanHistoryItem[]} onSample={toggleSample} />
+          ))}
 
-        {view === 'guide' && <Guide state={modelState} />}
+        {view === 'chat' && (
+          <ChatPage key={mode} mode={mode} modelState={modelState} progress={progress} onDownload={() => download().catch(() => {})} />
+        )}
+
+        {view === 'guide' && <Guide state={modelState} mode={mode} onMode={switchMode} />}
       </main>
       </div>
 
@@ -496,6 +626,12 @@ export default function App() {
           }}
         />
       )}
+
+      <WindowsAiInventoryWidget
+        isOpen={winWidgetOpen}
+        onClose={() => setWinWidgetOpen(false)}
+        currentState={modelState}
+      />
     </>
   );
 }

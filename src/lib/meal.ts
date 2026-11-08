@@ -1,4 +1,4 @@
-import type { Companion, MealMeta, MealType, NutritionalInfo, PlaceType, ScanHistoryItem } from './types';
+import type { AnyItem, Companion, GiLoad, MealMeta, MealType, NutritionalInfo, PlaceType, Symptom } from './types';
 
 // 餐別色：與 styles.css 的色票一致
 export const MEAL_TYPES: { key: MealType; label: string; color: string }[] = [
@@ -49,13 +49,13 @@ export function toLocalInput(iso: string): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export function servingGrams(item: ScanHistoryItem): number {
+export function servingGrams(item: AnyItem): number {
   return item.meta.servingGrams ?? item.analysisResult.estimatedServingGrams ?? 100;
 }
 
-/** 這一份實際吃進去的量 */
-export function intake(item: ScanHistoryItem): NutritionalInfo {
-  const f = servingGrams(item) / 100;
+/** 這一份實際吃進去的量（瘦瘦針模式會乘上吃完的比例） */
+export function intake(item: AnyItem): NutritionalInfo {
+  const f = (servingGrams(item) / 100) * (item.meta.ateRatio ?? 1);
   const n = item.analysisResult.nutritionalInfo;
   return {
     calories: n.calories * f,
@@ -81,3 +81,30 @@ export function dayKey(d: Date): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
+
+// ---------- 瘦瘦針模式 ----------
+
+export const SYMPTOMS: { key: Symptom; label: string }[] = [
+  { key: 'nausea', label: '噁心' },
+  { key: 'bloating', label: '脹氣' },
+  { key: 'reflux', label: '胃酸逆流' },
+  { key: 'diarrhea', label: '腹瀉' },
+  { key: 'constipation', label: '便秘' },
+];
+export const symptomLabel = (k: Symptom) => SYMPTOMS.find((s) => s.key === k)?.label ?? k;
+
+export const ATE_RATIOS = [
+  { value: 1, label: '全部' },
+  { value: 0.75, label: '四分之三' },
+  { value: 0.5, label: '一半' },
+  { value: 0.25, label: '幾口' },
+];
+export const ateLabel = (v?: number) => ATE_RATIOS.find((r) => r.value === v)?.label;
+
+export const HUNGER = ['不餓', '有點餓', '普通', '餓', '很餓'];
+
+export const GI_LOAD: Record<GiLoad, { label: string; color: string }> = {
+  low: { label: '低', color: '#5E9C84' },
+  medium: { label: '中', color: '#E3A55B' },
+  high: { label: '高', color: '#D9694A' },
+};

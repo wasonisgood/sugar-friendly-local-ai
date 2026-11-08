@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { COMPANIONS, MEAL_TYPES, PLACE_TYPES, guessMealType, toLocalInput } from '../lib/meal';
+import { ATE_RATIOS, COMPANIONS, HUNGER, MEAL_TYPES, PLACE_TYPES, SYMPTOMS, guessMealType, toLocalInput } from '../lib/meal';
+import type { Mode } from '../lib/modes';
 import type { MealMeta } from '../lib/types';
 
 const num = (v: string) => (v.trim() === '' ? undefined : Math.max(0, Number(v)));
@@ -17,6 +18,7 @@ function Row({ label, hint, htmlFor, children }: { label: string; hint?: string;
 }
 
 export default function MealForm({
+  mode,
   value,
   onChange,
   knownPlaces,
@@ -25,6 +27,7 @@ export default function MealForm({
   disabled,
   idPrefix = 'mf',
 }: {
+  mode: Mode;
   value: MealMeta;
   onChange: (m: MealMeta) => void;
   knownPlaces: string[];
@@ -143,34 +146,98 @@ export default function MealForm({
         </span>
       </Row>
 
-      <Row label="血糖" hint="mg/dL，餐後可之後補">
-        <div className="pair">
-          <label className="pair-item">
-            <span className="pair-label">餐前</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={600}
-              className="input"
-              value={value.bloodSugarBefore ?? ''}
-              onChange={(e) => set('bloodSugarBefore', num(e.target.value))}
-            />
-          </label>
-          <label className="pair-item">
-            <span className="pair-label">餐後 2 小時</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={600}
-              className="input"
-              value={value.bloodSugarAfter ?? ''}
-              onChange={(e) => set('bloodSugarAfter', num(e.target.value))}
-            />
-          </label>
-        </div>
-      </Row>
+      {mode === 'sugar' ? (
+        <>
+          <Row label="血糖" hint="mg/dL，餐後可之後補">
+            <div className="pair">
+              <label className="pair-item">
+                <span className="pair-label">餐前</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={600}
+                  className="input"
+                  value={value.bloodSugarBefore ?? ''}
+                  onChange={(e) => set('bloodSugarBefore', num(e.target.value))}
+                />
+              </label>
+              <label className="pair-item">
+                <span className="pair-label">餐後 2 小時</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={600}
+                  className="input"
+                  value={value.bloodSugarAfter ?? ''}
+                  onChange={(e) => set('bloodSugarAfter', num(e.target.value))}
+                />
+              </label>
+            </div>
+          </Row>
+        </>
+      ) : (
+        <>
+          <Row label="吃之前" hint="多餓？">
+            <div className="toggles" role="radiogroup" aria-label="飢餓感">
+              {HUNGER.map((h, i) => (
+                <button
+                  key={h}
+                  type="button"
+                  role="radio"
+                  className="toggle"
+                  aria-checked={value.hungerBefore === i + 1}
+                  aria-pressed={value.hungerBefore === i + 1}
+                  onClick={() => set('hungerBefore', value.hungerBefore === i + 1 ? undefined : i + 1)}
+                >
+                  {h}
+                </button>
+              ))}
+            </div>
+          </Row>
+
+          <Row label="吃完多少" hint="吃不完很正常">
+            <div className="toggles" role="radiogroup" aria-label="吃完多少">
+              {ATE_RATIOS.map((r) => (
+                <button
+                  key={r.value}
+                  type="button"
+                  role="radio"
+                  className="toggle"
+                  aria-checked={(value.ateRatio ?? 1) === r.value}
+                  aria-pressed={(value.ateRatio ?? 1) === r.value}
+                  onClick={() => set('ateRatio', r.value === 1 ? undefined : r.value)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </Row>
+
+          <Row label="餐後不適" hint="可複選，之後也能補">
+            <div className="toggles">
+              {SYMPTOMS.map((sym) => {
+                const on = value.symptoms?.includes(sym.key) ?? false;
+                return (
+                  <button
+                    key={sym.key}
+                    type="button"
+                    className="toggle toggle-warn"
+                    aria-pressed={on}
+                    onClick={() => {
+                      const next = on ? (value.symptoms ?? []).filter((x) => x !== sym.key) : [...(value.symptoms ?? []), sym.key];
+                      set('symptoms', next.length ? next : undefined);
+                    }}
+                  >
+                    {sym.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
+        </>
+      )}
 
       <Row label="備註" htmlFor={id('notes')}>
         <textarea
@@ -178,7 +245,7 @@ export default function MealForm({
           className="input"
           rows={2}
           maxLength={120}
-          placeholder="少飯、醬料另外放、兩人分食⋯⋯"
+          placeholder={mode === 'sugar' ? '少飯、醬料另外放、兩人分食⋯⋯' : '打針第二天、剩下的留到晚餐、配了一杯豆漿⋯⋯'}
           value={value.notes ?? ''}
           onChange={(e) => set('notes', e.target.value)}
         />

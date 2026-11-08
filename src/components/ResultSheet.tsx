@@ -4,7 +4,7 @@ import NutritionLabel from './NutritionLabel';
 
 const VERDICT = { good: '適合糖友', fair: '注意份量', poor: '盡量少吃' } as const;
 
-function Notes({ title, items, tone }: { title: string; items: string[]; tone?: 'warn' }) {
+export function Notes({ title, items, tone }: { title: string; items: string[]; tone?: 'warn' }) {
   if (items.length === 0) return null;
   return (
     <section className={`note${tone ? ` note-${tone}` : ''}`}>

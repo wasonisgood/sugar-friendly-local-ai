@@ -1,5 +1,8 @@
+// 送進本地模型的圖片長邊上限：越小，模型處理影像越快（食物辨識 768px 通常已足夠）
+export const MODEL_MAX_SIDE = 768;
+
 export interface PreparedImage {
-  blob: Blob; // 給模型用，長邊最多 1024px
+  blob: Blob; // 給模型用，長邊最多 MODEL_MAX_SIDE px
   previewUrl: string; // object URL，畫面預覽
   thumbnail: string; // data URL，存進紀錄
 }
@@ -16,7 +19,7 @@ async function drawScaled(source: ImageBitmap, maxSide: number): Promise<HTMLCan
 export async function prepareImage(file: Blob): Promise<PreparedImage> {
   const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   try {
-    const large = await drawScaled(bitmap, 1024);
+    const large = await drawScaled(bitmap, MODEL_MAX_SIDE);
     const blob = await new Promise<Blob>((resolve, reject) =>
       large.toBlob((b) => (b ? resolve(b) : reject(new Error('無法轉換圖片'))), 'image/jpeg', 0.88),
     );

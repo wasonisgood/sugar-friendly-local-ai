@@ -28,12 +28,12 @@ const CATEGORY_COLOR: Record<string, string> = {
   混合餐: '#E7C59A',
 };
 
-export function sampleThumb(category: string): string {
+export function sampleThumb(category: string, bg = '#E8F5BD', ring = '#C7EABB'): string {
   const fill = CATEGORY_COLOR[category] ?? '#E7C59A';
   return (
     'data:image/svg+xml;utf8,' +
     encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="#E8F5BD"/><ellipse cx="160" cy="128" rx="112" ry="74" fill="#FFFFFF" stroke="#C7EABB" stroke-width="3"/><ellipse cx="160" cy="124" rx="74" ry="44" fill="${fill}"/></svg>`,
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"><rect width="320" height="240" fill="${bg}"/><ellipse cx="160" cy="128" rx="112" ry="74" fill="#FFFFFF" stroke="${ring}" stroke-width="3"/><ellipse cx="160" cy="124" rx="74" ry="44" fill="${fill}"/></svg>`,
     )
   );
 }
@@ -82,7 +82,7 @@ const FOODS: Record<MealType, Food[]> = {
   ],
 };
 
-const PLACE_BY_MEAL: Record<MealType, [PlaceType, string?][]> = {
+export const PLACE_BY_MEAL: Record<MealType, [PlaceType, string?][]> = {
   breakfast: [['home'], ['takeout', '巷口早餐店'], ['office']],
   lunch: [['restaurant', '公司附近自助餐'], ['office'], ['takeout', '便當店'], ['restaurant', '麵店']],
   dinner: [['home'], ['restaurant', '火鍋店'], ['takeout']],
@@ -90,7 +90,7 @@ const PLACE_BY_MEAL: Record<MealType, [PlaceType, string?][]> = {
   latenight: [['home'], ['takeout', '夜市']],
 };
 
-const HOUR: Record<MealType, [number, number]> = {
+export const HOUR: Record<MealType, [number, number]> = {
   breakfast: [7, 9],
   lunch: [12, 13],
   dinner: [18, 20],
@@ -98,7 +98,7 @@ const HOUR: Record<MealType, [number, number]> = {
   latenight: [22, 23],
 };
 
-function rng(seed: number) {
+export function rng(seed: number) {
   return () => {
     seed = (seed * 1664525 + 1013904223) % 4294967296;
     return seed / 4294967296;

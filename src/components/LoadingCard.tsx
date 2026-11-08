@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { STEPS, readProgress, type AnalysisStats } from '../lib/progress';
+import { isEdge } from '../lib/localModel';
+import type { Mode } from '../lib/modes';
 import Mascot from './Mascot';
+import SurfGame from './SurfGame';
 
 function useElapsed(since: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -21,12 +24,25 @@ function fmtLeft(ms: number) {
 }
 
 /** 辨識中：吉祥物拿放大鏡＋四個步驟＋進度條 */
-export function AnalyzingCard({ text, startedAt, stats, onCancel }: { text: string; startedAt: number; stats: AnalysisStats; onCancel: () => void }) {
+export function AnalyzingCard({
+  mode,
+  text,
+  startedAt,
+  stats,
+  onCancel,
+}: {
+  mode: Mode;
+  text: string;
+  startedAt: number;
+  stats: AnalysisStats;
+  onCancel: () => void;
+}) {
   const elapsed = useElapsed(startedAt);
   const p = readProgress(text, elapsed, stats);
   const left = Math.max(0, stats.ms - elapsed);
 
   return (
+    <div className="analyzing">
     <div className="loading" role="status" aria-live="polite">
       <Mascot mode="scan" />
       <div className="loading-body">
@@ -37,7 +53,7 @@ export function AnalyzingCard({ text, startedAt, stats, onCancel }: { text: stri
           <span style={{ width: `${p.ratio * 100}%` }} />
         </div>
         <ol className="loading-steps">
-          {STEPS.map((s, i) => (
+          {STEPS[mode].map((s, i) => (
             <li key={s} className={i < p.step ? 'is-done' : i === p.step ? 'is-now' : undefined}>
               <i aria-hidden="true" />
               {s}
@@ -51,6 +67,8 @@ export function AnalyzingCard({ text, startedAt, stats, onCancel }: { text: stri
           </button>
         </p>
       </div>
+    </div>
+    <SurfGame mode={mode} />
     </div>
   );
 }
@@ -80,7 +98,7 @@ export function DownloadCard({ ratio }: { ratio: number | null }) {
         <p className="loading-meta">
           模型約 2 GB，只需下載一次。{r > 0.01 ? fmtLeft(eta) : '正在連線⋯'}
           <br />
-          詳細進度也能在 chrome://on-device-internals 查看。
+          詳細進度也能在 {isEdge() ? 'edge://on-device-internals' : 'chrome://on-device-internals'} 查看。
         </p>
       </div>
     </div>

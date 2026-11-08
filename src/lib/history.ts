@@ -1,83 +1,78 @@
+import type { Mode } from './modes';
 import { buildSampleRecords } from './sample';
-import type { FoodAnalysisResult, MealMeta, ScanHistoryItem } from './types';
+import { buildGlp1SampleRecords } from './sampleGlp1';
+import type { AnyItem, BaseAnalysis, MealMeta, ScanHistoryItem } from './types';
 
-const STORAGE_KEY = 'sugar-friendly:scan-history';
 const MAX_ITEMS = 300;
 
-type LegacyItem = Omit<ScanHistoryItem, 'meta'> & { meta?: MealMeta; notes?: string };
+type LegacyItem = Omit<AnyItem, 'meta'> & { meta?: MealMeta; notes?: string };
 
 // 第一版的紀錄沒有 meta，補上預設值
-function migrate(raw: LegacyItem): ScanHistoryItem {
-  if (raw.meta) return raw as ScanHistoryItem;
+function migrate(raw: LegacyItem): AnyItem {
+  if (raw.meta) return raw as AnyItem;
   const { notes, ...rest } = raw;
   return { ...rest, meta: { eatenAt: raw.timestamp, mealType: 'lunch', placeType: 'other', notes } };
 }
 
-const byEatenAtDesc = (a: ScanHistoryItem, b: ScanHistoryItem) => b.meta.eatenAt.localeCompare(a.meta.eatenAt);
-
-export function loadHistory(): ScanHistoryItem[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as LegacyItem[]).map(migrate).sort(byEatenAtDesc) : [];
-  } catch {
-    return [];
-  }
-}
-
-function persist(items: ScanHistoryItem[]): ScanHistoryItem[] {
-  let toSave = [...items].sort(byEatenAtDesc).slice(0, MAX_ITEMS);
-  // 空間不足時先丟示範資料，再從最舊的開始丟
-  while (toSave.length > 0) {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-      break;
-    } catch {
-      const sampleIdx = toSave.findLastIndex((i) => i.isSample);
-      toSave = sampleIdx >= 0 ? toSave.filter((_, i) => i !== sampleIdx) : toSave.slice(0, -1);
-    }
-  }
-  return toSave;
-}
-
+const byEatenAtDesc = (a: AnyItem, b: AnyItem) => b.meta.eatenAt.localeCompare(a.meta.eatenAt);
 const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
-export function addHistory(
-  thumbnail: string,
-  analysisResult: FoodAnalysisResult,
-  meta: MealMeta,
-): { items: ScanHistoryItem[]; id: string } {
-  const item: ScanHistoryItem = {
-    id: newId(),
-    thumbnail,
-    analysisResult,
-    timestamp: new Date().toISOString(),
-    meta: { ...meta, notes: meta.notes?.trim() || undefined, placeName: meta.placeName?.trim() || undefined },
-  };
-  return { items: persist([item, ...loadHistory()]), id: item.id };
-}
+/** 每個模式一份獨立的紀錄，互不混雜 */
+function makeStore<R extends BaseAnalysis>(key: string, buildSamples: () => ScanHistoryItem<R>[]) {
+  type Item = ScanHistoryItem<R>;
 
-export function updateMeta(id: string, meta: MealMeta): ScanHistoryItem[] {
-  return persist(loadHistory().map((i) => (i.id === id ? { ...i, meta } : i)));
-}
-
-export function removeHistory(id: string): ScanHistoryItem[] {
-  return persist(loadHistory().filter((i) => i.id !== id));
-}
-
-export function clearHistory(): ScanHistoryItem[] {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch {
-    /* ignore */
+  function load(): Item[] {
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? ((JSON.parse(raw) as LegacyItem[]).map(migrate) as Item[]).sort(byEatenAtDesc) : [];
+    } catch {
+      return [];
+    }
   }
-  return [];
+
+  function persist(items: Item[]): Item[] {
+    let toSave = [...items].sort(byEatenAtDesc).slice(0, MAX_ITEMS);
+    // 空間不足時先丟示範資料，再從最舊的開始丟
+    while (toSave.length > 0) {
+      try {
+        localStorage.setItem(key, JSON.stringify(toSave));
+        break;
+      } catch {
+        const sampleIdx = toSave.findLastIndex((i) => i.isSample);
+        toSave = sampleIdx >= 0 ? toSave.filter((_, i) => i !== sampleIdx) : toSave.slice(0, -1);
+      }
+    }
+    return toSave;
+  }
+
+  return {
+    load,
+    add(thumbnail: string, analysisResult: R, meta: MealMeta): { items: Item[]; id: string } {
+      const item: Item = {
+        id: newId(),
+        thumbnail,
+        analysisResult,
+        timestamp: new Date().toISOString(),
+        meta: { ...meta, notes: meta.notes?.trim() || undefined, placeName: meta.placeName?.trim() || undefined },
+      };
+      return { items: persist([item, ...load()]), id: item.id };
+    },
+    updateMeta: (id: string, meta: MealMeta) => persist(load().map((i) => (i.id === id ? { ...i, meta } : i))),
+    remove: (id: string) => persist(load().filter((i) => i.id !== id)),
+    clear(): Item[] {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+      return [];
+    },
+    addSamples: () => persist([...load().filter((i) => !i.isSample), ...buildSamples()]),
+    removeSamples: () => persist(load().filter((i) => !i.isSample)),
+  };
 }
 
-export function addSampleData(): ScanHistoryItem[] {
-  const real = loadHistory().filter((i) => !i.isSample);
-  return persist([...real, ...buildSampleRecords()]);
-}
+export const sugarStore = makeStore('sugar-friendly:scan-history', buildSampleRecords);
+export const glp1Store = makeStore('sugar-friendly:glp1-history', buildGlp1SampleRecords);
 
-export function removeSampleData(): ScanHistoryItem[] {
-  return persist(loadHistory().filter((i) => !i.isSample));
-}
+export const storeFor = (mode: Mode) => (mode === 'glp1' ? glp1Store : sugarStore);

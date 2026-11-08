@@ -1,4 +1,3 @@
-import { useMemo, useState, type ReactNode } from 'react';
 import {
   Bar,
   BarChart,
@@ -20,38 +19,23 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts';
-import { MEAL_TYPES, TONE_COLOR, dayKey, mealInfo, scoreTone } from '../lib/meal';
+import { MEAL_TYPES, TONE_COLOR, mealInfo, scoreTone } from '../lib/meal';
+import { MODES } from '../lib/modes';
 import {
   REFERENCE,
   byCategory,
   byDay,
   byMealType,
   byPlace,
-  inPeriod,
   macroShare,
   mealPoints,
   nutrientVsReference,
   summary,
 } from '../lib/stats';
 import type { ScanHistoryItem } from '../lib/types';
-import PageHead from './PageHead';
+import ChartBoard, { CalendarHeat, NoData, PointTip, chartKit, type ChartDef } from './ChartBoard';
 
-const C = {
-  green: '#5E9152',
-  orange: '#E9B949',
-  red: '#D9694A',
-  blue: '#6C9BC4',
-  purple: '#A584A8',
-  sage: '#C7EABB',
-  grid: '#EDF0E4',
-  axis: '#8C9686',
-};
-
-const axis = { stroke: C.axis, fontSize: 12, tickLine: false, axisLine: { stroke: '#DDE3CF' } };
-const tooltipStyle = {
-  contentStyle: { borderRadius: 6, border: '1px solid #DDE3CF', boxShadow: '0 4px 14px rgba(60,80,50,.08)', background: '#FFFFFF', fontSize: 13 },
-  labelStyle: { color: '#2F4A2A', fontWeight: 600 },
-};
+const { C, axis, tooltipStyle } = chartKit(MODES.sugar);
 
 type ChartId =
   | 'daily-intake'
@@ -66,7 +50,7 @@ type ChartId =
   | 'calendar'
   | 'category';
 
-const CHARTS: { id: ChartId; title: string; desc: string }[] = [
+const CHARTS: ChartDef<ChartId>[] = [
   { id: 'daily-intake', title: '每日熱量與碳水', desc: '長條是熱量，折線是碳水化合物' },
   { id: 'score-trend', title: '糖友善度趨勢', desc: '每天平均分數，綠色區間為 8 分以上' },
   { id: 'calendar', title: '飲食日曆', desc: '最近五週每天的平均糖友善度' },
@@ -82,174 +66,63 @@ const CHARTS: { id: ChartId; title: string; desc: string }[] = [
 
 const WIDE = new Set<ChartId>(['daily-intake', 'blood-sugar', 'time-of-day']);
 const DEFAULT_CHARTS: ChartId[] = ['daily-intake', 'score-trend', 'calendar', 'macro', 'meal-type', 'blood-sugar'];
-const PREF_KEY = 'sugar-friendly:charts';
-
-const PERIODS = [
-  { days: 7, label: '7 天' },
-  { days: 30, label: '30 天' },
-  { days: 90, label: '90 天' },
-  { days: null, label: '全部' },
-] as const;
-
-function loadPref(): ChartId[] {
-  try {
-    const v = JSON.parse(localStorage.getItem(PREF_KEY) ?? 'null');
-    if (Array.isArray(v)) return v.filter((x) => CHARTS.some((c) => c.id === x));
-  } catch {
-    /* ignore */
-  }
-  return DEFAULT_CHARTS;
-}
-
-function NoData({ children = '這段期間沒有資料' }: { children?: ReactNode }) {
-  return <div className="chart-empty">{children}</div>;
-}
 
 export default function HealthCharts({ items, onSample }: { items: ScanHistoryItem[]; onSample: (on: boolean) => void }) {
-  const [period, setPeriod] = useState<number | null>(30);
-  const [selected, setSelected] = useState<ChartId[]>(loadPref);
-  const [picking, setPicking] = useState(false);
-
-  const data = useMemo(() => inPeriod(items, period), [items, period]);
-  const s = useMemo(() => summary(data), [data]);
-
-  const toggle = (id: ChartId) => {
-    // 依 CHARTS 的順序排列，不依點選順序
-    const next = selected.includes(id) ? selected.filter((x) => x !== id) : CHARTS.map((c) => c.id).filter((x) => x === id || selected.includes(x));
-    setSelected(next);
-    try {
-      localStorage.setItem(PREF_KEY, JSON.stringify(next));
-    } catch {
-      /* ignore */
-    }
-  };
-
-  if (items.length === 0) {
-    return (
-      <>
-        <PageHead eyebrow="健康圖表" title="還沒有資料可以畫" />
-        <div className="blank">
-          <p>記錄幾餐之後，這裡會依時間、餐別、地點與血糖畫出各種圖。</p>
-          <p>也可以先放入四週的示範資料看看。</p>
-          <button type="button" className="btn btn-quiet" onClick={() => onSample(true)}>
-            放入示範資料
-          </button>
-        </div>
-      </>
-    );
-  }
-
-  const shown = CHARTS.filter((c) => selected.includes(c.id));
-
   return (
-    <>
-      <PageHead
-        eyebrow="健康圖表"
-        title={period ? `最近 ${period} 天` : '全部紀錄'}
-        aside={
-          <div className="tabs" role="tablist" aria-label="期間">
-            {PERIODS.map((p) => (
-              <button key={p.label} type="button" role="tab" aria-selected={period === p.days} className="tab" onClick={() => setPeriod(p.days)}>
-                {p.label}
-              </button>
-            ))}
-          </div>
-        }
-      />
+    <ChartBoard
+      items={items}
+      charts={CHARTS}
+      wide={WIDE}
+      defaults={DEFAULT_CHARTS}
+      prefKey="sugar-friendly:charts"
+      emptyText="記錄幾餐之後，這裡會依時間、餐別、地點與血糖畫出各種圖。"
+      onSample={onSample}
+      strip={(data) => <Strip items={data} />}
+      render={(id, data) => <ChartBody id={id} items={data} />}
+    />
+  );
+}
 
-      <dl className="strip">
-        <div>
-          <dt>記錄</dt>
-          <dd>
-            {s.meals}
-            <small>餐・{s.days} 天</small>
-          </dd>
-        </div>
-        <div>
-          <dt>平均糖友善度</dt>
-          <dd style={{ color: TONE_COLOR[scoreTone(s.score)] }}>
-            {s.score}
-            <small>/10</small>
-          </dd>
-        </div>
-        <div>
-          <dt>每日熱量</dt>
-          <dd>
-            {s.kcalPerDay.toLocaleString()}
-            <small>大卡</small>
-          </dd>
-        </div>
-        <div>
-          <dt>每日碳水</dt>
-          <dd>
-            {s.carbsPerDay}
-            <small>克</small>
-          </dd>
-        </div>
-        <div>
-          <dt>餐後血糖達標</dt>
-          <dd>
-            {s.bgInRange != null ? s.bgInRange : '—'}
-            <small>{s.bgInRange != null ? `%・平均 ${s.bgAfterAvg}` : '尚未填寫'}</small>
-          </dd>
-        </div>
-      </dl>
-
-      <div className="charts-layout">
-        <aside className="picker">
-          <button type="button" className="picker-toggle" aria-expanded={picking} onClick={() => setPicking((v) => !v)}>
-            顯示的圖表 <b>{selected.length}</b>／{CHARTS.length}
-          </button>
-          <div className={`picker-body${picking ? ' is-open' : ''}`}>
-            <ul className="picker-list">
-              {CHARTS.map((c) => (
-                <li key={c.id}>
-                  <label className="picker-item">
-                    <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} />
-                    <span>{c.title}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <div className="picker-actions">
-              <button type="button" className="link-btn" onClick={() => CHARTS.forEach((c) => !selected.includes(c.id) && toggle(c.id))}>
-                全部顯示
-              </button>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => {
-                  setSelected(DEFAULT_CHARTS);
-                  try {
-                    localStorage.setItem(PREF_KEY, JSON.stringify(DEFAULT_CHARTS));
-                  } catch {
-                    /* ignore */
-                  }
-                }}
-              >
-                恢復預設
-              </button>
-            </div>
-          </div>
-        </aside>
-
-        <div className="chart-flow">
-          {data.length === 0 && <NoData>這段期間沒有紀錄，換個期間看看。</NoData>}
-          {data.length > 0 &&
-            shown.map((c, i) => (
-              <section key={c.id} className={`chart${WIDE.has(c.id) ? ' chart-wide' : ''}`}>
-                <header>
-                  <span className="chart-no">{String(i + 1).padStart(2, '0')}</span>
-                  <h2>{c.title}</h2>
-                  <p>{c.desc}</p>
-                </header>
-                <ChartBody id={c.id} items={data} />
-              </section>
-            ))}
-          {data.length > 0 && shown.length === 0 && <NoData>左邊勾選想看的圖表。</NoData>}
-        </div>
+function Strip({ items }: { items: ScanHistoryItem[] }) {
+  const s = summary(items);
+  return (
+    <dl className="strip">
+      <div>
+        <dt>記錄</dt>
+        <dd>
+          {s.meals}
+          <small>餐・{s.days} 天</small>
+        </dd>
       </div>
-    </>
+      <div>
+        <dt>平均糖友善度</dt>
+        <dd style={{ color: TONE_COLOR[scoreTone(s.score)] }}>
+          {s.score}
+          <small>/10</small>
+        </dd>
+      </div>
+      <div>
+        <dt>每日熱量</dt>
+        <dd>
+          {s.kcalPerDay.toLocaleString()}
+          <small>大卡</small>
+        </dd>
+      </div>
+      <div>
+        <dt>每日碳水</dt>
+        <dd>
+          {s.carbsPerDay}
+          <small>克</small>
+        </dd>
+      </div>
+      <div>
+        <dt>餐後血糖達標</dt>
+        <dd>
+          {s.bgInRange != null ? s.bgInRange : '—'}
+          <small>{s.bgInRange != null ? `%・平均 ${s.bgAfterAvg}` : '尚未填寫'}</small>
+        </dd>
+      </div>
+    </dl>
   );
 }
 
@@ -266,7 +139,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <YAxis yAxisId="g" orientation="right" {...axis} />
             <Tooltip {...tooltipStyle} formatter={(v, n) => [`${v} ${n === '熱量' ? '大卡' : '公克'}`, n]} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 13 }} />
-            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill="#A2CB8B" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar yAxisId="kcal" dataKey="calories" name="熱量" fill={C.mid} radius={[4, 4, 0, 0]} maxBarSize={28} />
             <Line yAxisId="g" dataKey="carbs" name="碳水" stroke={C.orange} strokeWidth={2} dot={{ r: 3 }} />
           </ComposedChart>
         </ResponsiveContainer>
@@ -354,7 +227,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <XAxis type="number" dataKey="hour" name="時間" domain={[0, 24]} ticks={[0, 6, 9, 12, 15, 18, 21, 24]} tickFormatter={(h) => `${h}時`} {...axis} />
             <YAxis type="number" dataKey="score" name="糖友善度" domain={[0, 10]} {...axis} />
             <ZAxis type="number" dataKey="carbs" range={[30, 260]} name="碳水" />
-            <Tooltip {...tooltipStyle} cursor={{ strokeDasharray: '3 3' }} content={<PointTip />} />
+            <Tooltip {...tooltipStyle} cursor={{ strokeDasharray: '3 3' }} content={<PointTip scoreLabel="糖友善度" />} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 13 }} />
             {MEAL_TYPES.map((m) => (
               <Scatter key={m.key} name={m.label} data={pts.filter((p) => p.mealType === m.key)} fill={m.color} fillOpacity={0.75} />
@@ -400,7 +273,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={pts} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
             <CartesianGrid stroke={C.grid} vertical={false} />
-            <ReferenceArea y1={REFERENCE.bgBefore[0]} y2={REFERENCE.bgBefore[1]} fill={C.sage} fillOpacity={0.25} />
+            <ReferenceArea y1={REFERENCE.bgBefore[0]} y2={REFERENCE.bgBefore[1]} fill={C.soft} fillOpacity={0.25} />
             <ReferenceLine y={REFERENCE.bgAfter} stroke={C.red} strokeDasharray="4 4" label={{ value: `餐後上限 ${REFERENCE.bgAfter}`, position: 'insideTopRight', fontSize: 11, fill: C.red }} />
             <XAxis dataKey="label" {...axis} minTickGap={16} />
             <YAxis domain={[60, 'auto']} {...axis} />
@@ -423,7 +296,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
             <XAxis type="number" dataKey="carbs" name="碳水" unit="g" {...axis} />
             <YAxis type="number" dataKey="rise" name="上升" {...axis} />
             <ReferenceLine y={50} stroke={C.orange} strokeDasharray="4 4" label={{ value: '上升 50', position: 'insideTopRight', fontSize: 11, fill: C.orange }} />
-            <Tooltip {...tooltipStyle} content={<PointTip />} />
+            <Tooltip {...tooltipStyle} content={<PointTip scoreLabel="糖友善度" />} />
             <Scatter data={pts} fill={C.purple} fillOpacity={0.7} />
           </ScatterChart>
         </ResponsiveContainer>
@@ -462,7 +335,7 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
 
     case 'category': {
       const rows = byCategory(items);
-      const palette = [C.green, C.orange, C.blue, C.purple, C.red, C.sage, '#8D9488'];
+      const palette = [C.green, C.orange, C.blue, C.purple, C.red, C.soft, '#8D9488'];
       return (
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={rows} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
@@ -480,71 +353,4 @@ function ChartBody({ id, items }: { id: ChartId; items: ScanHistoryItem[] }) {
       );
     }
   }
-}
-
-function PointTip({ active, payload }: { active?: boolean; payload?: { payload: ReturnType<typeof mealPoints>[number] }[] }) {
-  if (!active || !payload?.length) return null;
-  const p = payload[0].payload;
-  const d = new Date(p.time);
-  return (
-    <div className="tip">
-      <b>{p.name}</b>
-      <span>
-        {d.getMonth() + 1}/{d.getDate()} {d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })} · {mealInfo(p.mealType).label}
-      </span>
-      <span>
-        糖友善度 {p.score} · 碳水 {p.carbs} 公克
-      </span>
-      {p.rise != null && <span>餐後上升 {p.rise} mg/dL</span>}
-    </div>
-  );
-}
-
-function CalendarHeat({ items }: { items: ScanHistoryItem[] }) {
-  const rows = byDay(items);
-  const map = new Map(rows.map((r) => [r.key, r]));
-  const end = new Date();
-  end.setHours(0, 0, 0, 0);
-  const start = new Date(end);
-  start.setDate(start.getDate() - 28 - start.getDay()); // 從四週前的週日開始，共五列
-  const cells: { key: string; date: Date }[] = [];
-  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) cells.push({ key: dayKey(d), date: new Date(d) });
-
-  return (
-    <div className="heat">
-      <div className="heat-week">
-        {['日', '一', '二', '三', '四', '五', '六'].map((w) => (
-          <span key={w}>{w}</span>
-        ))}
-      </div>
-      <div className="heat-grid">
-        {cells.map((c) => {
-          const r = map.get(c.key);
-          const color = r ? TONE_COLOR[scoreTone(r.score)] : undefined;
-          return (
-            <span
-              key={c.key}
-              className={`heat-cell${r ? '' : ' is-empty'}`}
-              style={color ? { background: `color-mix(in srgb, ${color} ${Math.min(100, 35 + r!.meals * 15)}%, white)` } : undefined}
-              title={r ? `${c.date.getMonth() + 1}/${c.date.getDate()}：平均 ${r.score} 分，${r.meals} 餐，${r.calories} 大卡` : `${c.date.getMonth() + 1}/${c.date.getDate()}：沒有紀錄`}
-            >
-              {c.date.getDate()}
-            </span>
-          );
-        })}
-      </div>
-      <div className="heat-legend small muted">
-        <span>
-          <i style={{ background: TONE_COLOR.good }} /> 8 分以上
-        </span>
-        <span>
-          <i style={{ background: TONE_COLOR.fair }} /> 6–7 分
-        </span>
-        <span>
-          <i style={{ background: TONE_COLOR.poor }} /> 6 分以下
-        </span>
-        <span>顏色越深代表記錄的餐數越多</span>
-      </div>
-    </div>
-  );
 }
